@@ -19,7 +19,9 @@ import type {
     onehdResponse,
     hollymoviehdResponse,
     vidlinkResponse,
-    purstreamResponse
+    purstreamResponse,
+    deltaResponse,
+    movieboxSource
 } from './vidnest.types.js';
 
 export class VidNestProvider extends BaseProvider {
@@ -135,7 +137,7 @@ export class VidNestProvider extends BaseProvider {
                         root.data.stream.type,
                         root.data.stream.playlist
                     ),
-                    quality: 'auto',
+                    quality: 'Auto',
                     audioTracks: [{ language: 'English', label: 'eng' }],
                     provider: { id: this.id, name: this.name }
                 }
@@ -148,6 +150,18 @@ export class VidNestProvider extends BaseProvider {
                 }))
         },
 
+        delta: {
+            parse: (d) => decrypt<deltaResponse>(d),
+            mapSources: (root) => root.streams.map((s) => ({
+                url: this.createProxyUrl(s.url, this.HEADERS),
+                type: this.inferSourceType(s.type, s.url),
+                quality: 'Auto',
+                audioTracks: [{ language: s.language.slice(0, 3), label: s.language }],
+                provider: { id: this.id, name: this.name }
+            })),
+            mapSubtitles: () => []
+        },
+
         purstream: {
             parse: (d) => decrypt<purstreamResponse>(d),
             mapSources: (root) =>
@@ -158,6 +172,18 @@ export class VidNestProvider extends BaseProvider {
                     audioTracks: [{ language: 'French', label: 'fr' }],
                     provider: { id: this.id, name: this.name }
                 })),
+            mapSubtitles: () => []
+        },
+
+        moviebox: {
+            parse: (d) => decrypt<movieboxSource>(d),
+            mapSources: (root) => root.url.map((u) => ({
+                url: this.createProxyUrl(u.link, this.HEADERS),
+                type: this.inferSourceType(u.type, u.link),
+                quality: 'Auto',
+                audioTracks: [{ language: u.lang.slice(0, 3), label: u.lang }],
+                provider: { id: this.id, name: this.name }
+            })),
             mapSubtitles: () => []
         }
     };

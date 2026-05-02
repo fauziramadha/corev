@@ -112,6 +112,23 @@ export interface purstreamSource {
     url: string;
 }
 
+// moviebox
+export interface movieboxSource {
+  headers: Record<string, string>
+  needConfig: boolean
+  provider: string
+  proxy: boolean
+  url: movieboxUrl[]
+}
+
+export interface movieboxUrl {
+  lang: string
+  link: string
+  resolution: string
+  type: string
+}
+
+
 // SERVER MAP
 export interface ServerMap {
     allmovies: allmoviesResponse;
@@ -120,6 +137,8 @@ export interface ServerMap {
     onehd: onehdResponse;
     klikxxi: klikxxiResponse;
     purstream: purstreamResponse;
+    delta: deltaResponse;
+    moviebox: movieboxSource;
 }
 
 // only servers we actually support (others will be skipped)

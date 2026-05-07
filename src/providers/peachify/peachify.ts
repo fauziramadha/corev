@@ -12,20 +12,20 @@ import type {
     PeachifyRawSubtitle
 } from './peachify.types.js';
 import decrypt from './decrypt.js';
+import { generateRandomUserAgent } from '../../utils/ua.js';
 
 export class PeachifyProvider extends BaseProvider {
     readonly id = 'Peachify';
     readonly name = 'Peachify';
     readonly enabled = true;
     readonly BASE_URL = 'https://peachify.top';
-    readonly MOVIEBOX_URL = 'https://uwu.peachify.top';
+    readonly MOVIEBOX_URL = 'https://uwu.eat-peach.sbs';
     readonly API_URL = 'https://usa.eat-peach.sbs';
     readonly HEADERS = {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'User-Agent': '',
         Accept: 'application/json, text/javascript, */*; q=0.01',
         'Accept-Language': 'en-US,en;q=0.9',
-        Referer: this.BASE_URL,
+        Referer: `${this.BASE_URL}/`,
         Origin: this.BASE_URL
     };
 
@@ -34,7 +34,6 @@ export class PeachifyProvider extends BaseProvider {
         `${this.API_URL}/holly`,
         `${this.API_URL}/air`,
         `${this.API_URL}/multi`,
-        `${this.API_URL}/ice`,
         `${this.API_URL}/net`
     ];
 
@@ -59,6 +58,8 @@ export class PeachifyProvider extends BaseProvider {
     private async getSources(
         media: ProviderMediaObject
     ): Promise<ProviderResult> {
+        this.HEADERS['User-Agent'] = generateRandomUserAgent();
+
         const results = await Promise.allSettled(
             this.PEACHIFY_SERVERS.map((server) =>
                 this.fetchFromServer(server, media)
@@ -127,7 +128,6 @@ export class PeachifyProvider extends BaseProvider {
             if (!decrypted) return null;
             body = decrypted;
         }
-
         const rawSources = Array.isArray(body.sources) ? body.sources : [];
         const rawSubtitles = Array.isArray(body.subtitles)
             ? body.subtitles
@@ -143,7 +143,7 @@ export class PeachifyProvider extends BaseProvider {
             .map((s) => this.parseSubtitle(s, serverName))
             .filter((s): s is PeachifyParsedSubtitle => s !== null);
 
-        const sources: ProviderResult['sources'] = parsed.map((s) => ({
+            const sources: ProviderResult['sources'] = parsed.map((s) => ({
             url: this.createProxyUrl(s.url, s.headers ?? this.HEADERS),
             type: s.type,
             quality: s.quality?.toString() ?? 'Auto',

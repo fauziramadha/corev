@@ -56,14 +56,17 @@ async function main() {
         stremio: {
             // exposes a stremio addon on /stremio/manifest.json
             enableNativeAddon: process.env.STREMIO_ADDON === 'true',
-            // allows adding custom stremio addons that can be used as providers.
+            // you can your own custom stremio addons as sources into cinepro.
+            stremioAddons: []
+            /*
             stremioAddons: [
                 {
-                    id: 'Streamify',
-                    url: 'https://stremify.hayd.uk/manifest.json',
+                    id: 'some-unique-id',
+                    url: 'https://example.com/manifest.json',
                     enabled: true
                 }
             ]
+            */
         },
 
         // MCP for AI agents

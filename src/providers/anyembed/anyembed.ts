@@ -39,7 +39,6 @@ export class AnyEmbed extends BaseProvider {
      * Fetch movie sources
      */
     async getMovieSources(media: ProviderMediaObject): Promise<ProviderResult> {
-        console.log(media)
         return this.getSources(media);
     }
 

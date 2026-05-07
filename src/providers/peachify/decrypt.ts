@@ -1,67 +1,134 @@
-import { PeachifyApiResponse } from './peachify.types.js';
+import { webcrypto } from 'crypto';
+import type { PeachifyApiResponse } from './peachify.types.js';
+
+const { subtle } = webcrypto;
 
 /**
- * aes-gcm decryption key used by peachify for encrypted api responses.
- * this is embedded in their frontend bundle.
+ * AES-GCM decryption key used by Peachify for encrypted API responses.
+ * This key is embedded in their frontend bundle.
  */
-const KEY =
-    'ZDhmMmExYjVlOWM0NzA4MTRmNmIyYzNhNWQ4ZTdmOTAxYTJiM2M0ZDVlM2Y3YThiOWMwZDFlMmYzYTRiNWM2ZA==';
+const ENCRYPTION_KEY_HEX =
+    'd8f2a1b5e9c470814f6b2c3a5d8e7f9c1a2b3c4d5e3f7a8b9c0d1e2f3a4d5c6d';
 
 /**
- * decrypts a peachify aes-gcm ciphertext string.
- * the payload format is: iv.tag.ciphertext — all url-safe base64 encoded.
- * the hex key is imported as a raw aes-gcm key via the web crypto api.
+ * Peachify payload format:
+ *
+ *   base64url(iv).base64url(ciphertext).base64url(authTag)
+ *
+ * AES-GCM expects ciphertext + authTag combined into a single buffer.
  */
-export default async function decrypt(
+type EncryptedPayload = {
+    iv: Uint8Array;
+    ciphertext: Uint8Array;
+    authTag: Uint8Array;
+};
+
+/**
+ * Convert a base64url string into bytes.
+ */
+function base64UrlToBytes(value: string): Uint8Array {
+    const base64 = value
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
+
+    const padded = base64.padEnd(
+        Math.ceil(base64.length / 4) * 4,
+        '='
+    );
+
+    const binary = Buffer.from(padded, 'base64');
+
+    return new Uint8Array(binary);
+}
+
+/**
+ * Convert a hex string into bytes.
+ */
+function hexToBytes(hex: string): Uint8Array {
+    if (hex.length % 2 !== 0) {
+        throw new Error('Invalid hex string length');
+    }
+
+    const bytes = new Uint8Array(hex.length / 2);
+
+    for (let i = 0; i < hex.length; i += 2) {
+        bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+    }
+
+    return bytes;
+}
+
+/**
+ * Import the AES-GCM decryption key.
+ */
+async function importDecryptionKey(): Promise<webcrypto.CryptoKey> {
+    return subtle.importKey(
+        'raw',
+        hexToBytes(ENCRYPTION_KEY_HEX),
+        { name: 'AES-GCM' },
+        false,
+        ['decrypt']
+    );
+}
+
+/**
+ * Parse the encrypted Peachify payload.
+ */
+function parsePayload(payload: string): EncryptedPayload {
+    const parts = payload.split('.');
+
+    if (parts.length !== 3) {
+        throw new Error(
+            'Invalid payload format. Expected: iv.ciphertext.authTag'
+        );
+    }
+
+    const [ivPart, ciphertextPart, authTagPart] = parts;
+
+    return {
+        iv: base64UrlToBytes(ivPart),
+        ciphertext: base64UrlToBytes(ciphertextPart),
+        authTag: base64UrlToBytes(authTagPart)
+    };
+}
+
+/**
+ * Decrypt a Peachify API response payload.
+ */
+export default async function decryptPayload(
     payload: string
 ): Promise<PeachifyApiResponse | null> {
     try {
-        const decode = (b64url: string): Uint8Array => {
-            const padded =
-                b64url.replace(/-/g, '+').replace(/_/g, '/') +
-                '='.repeat((4 - (b64url.length % 4)) % 4);
-            const binary = atob(padded);
-            const bytes = new Uint8Array(binary.length);
-            for (let i = 0; i < binary.length; i++) {
-                bytes[i] = binary.charCodeAt(i);
-            }
-            return bytes;
-        };
+        const { iv, ciphertext, authTag } = parsePayload(payload);
 
-        const importKey = async (hex: string) => {
-            const raw = new Uint8Array(
-                hex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16))
-            );
-            return crypto.subtle.importKey(
-                'raw',
-                raw,
-                { name: 'AES-GCM' },
-                false,
-                ['decrypt']
-            );
-        };
-
-        const [ivPart, tagPart, cipherPart] = payload.split('.');
-        const iv = decode(ivPart);
-        const tag = decode(tagPart);
-        const cipher = decode(cipherPart);
-
-        // web crypto expects the ghash tag appended to the ciphertext
-        const combined = new Uint8Array(tag.length + cipher.length);
-        combined.set(tag, 0);
-        combined.set(cipher, tag.length);
-
-        const key = await importKey(Buffer.from(KEY, 'base64').toString());
-        const plaintext = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv },
-            key,
-            combined
+        // AES-GCM expects ciphertext + auth tag concatenated.
+        const encryptedData = new Uint8Array(
+            ciphertext.length + authTag.length
         );
 
-        return JSON.parse(
-            new TextDecoder().decode(plaintext)
-        ) as PeachifyApiResponse;
-    } catch {
+        encryptedData.set(ciphertext);
+        encryptedData.set(authTag, ciphertext.length);
+
+        const key = await importDecryptionKey();
+
+        const decryptedBuffer = await subtle.decrypt(
+            {
+                name: 'AES-GCM',
+                iv
+            },
+            key,
+            encryptedData
+        );
+
+        const decryptedJson = new TextDecoder().decode(decryptedBuffer);
+
+        return JSON.parse(decryptedJson) as PeachifyApiResponse;
+    } catch (error) {
+        console.error(
+            'Failed to decrypt Peachify payload. Payload may be invalid or tampered with.',
+            error
+        );
+
         return null;
     }
 }

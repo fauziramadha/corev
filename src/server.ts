@@ -88,7 +88,8 @@ async function main() {
     const uiUrl = `https://ui.cinepro.cc/?omssurl=${encodeURIComponent(publicUrl)}`;
 
     const title = '🚀 CinePro/ui is in public testing';
-    const contrib = '🤝 We are looking for contributors to improve and develop!';
+    const contrib =
+        '🤝 We are looking for contributors to improve and develop!';
     const repo = 'Contribute: https://github.com/cinepro-org/ui';
     const tryIt = `🌐 Try it out: ${uiUrl}!`;
 

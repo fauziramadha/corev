@@ -10,7 +10,7 @@
 
 # CinePro Core 🎬
 
-### _Support CinePro's Development by starring this repo!_ ⭐
+### _Support CinePro’s development by starring this repository!_ ⭐
 
 <img src="https://repository-images.githubusercontent.com/1138947882/af901757-a06b-442d-8976-c485fcafc230"></img>
 
@@ -23,66 +23,76 @@ Built with [@omss/framework](https://www.npmjs.com/package/@omss/framework) for 
 
 ---
 
-CinePro Core is the central scraping and streaming engine of the CinePro ecosystem. It exposes an [OMSS-compliant](https://github.com/omss-spec/omss-spec) HTTP API for resolving movie and TV show stream sources from multiple providers, with Redis caching and full Docker support. Now even with MCP support for your AI agents! (The first streaming server worldwide to offer this feature). **Get up to 50+ unique sources for a single movie/tv show!**
+CinePro Core is the central scraping and streaming engine of the CinePro ecosystem. It exposes an [OMSS-compliant](https://github.com/omss-spec/omss-spec) HTTP API for resolving movie and TV show stream sources from multiple providers, with Redis caching and full Docker support.
+
+It now also includes MCP support for AI agents — making it the first streaming server worldwide to offer this feature.
+
+**Get access to 50+ unique sources for a single movie or TV show!**
 
 > [!CAUTION]
 > CinePro Core is designed for **personal and home use only.**  
-> While we do not stop you from hosting it publicly, it ~might be~ is insecure by default!*
-> Users are responsible for ensuring compliance with applicable laws and the terms of service of streaming sources.
+> While we do not prevent public hosting, it is insecure by default.*
+>
+> Users are responsible for ensuring compliance with applicable laws and the terms of service of streaming providers.
 
 <details><summary>*:</summary>
-CinePro/core is a scraper. Meaning it "clicks through" shady websites to get the actual streaming link and gives them to you, bypassing the whole ad/scam stuff. However, since this process takes up computing power this is also a vulnerable to (D)DOS attacks, which (if you deploy it online) can shoot your costs over the moon.
-We highly recommend you running it locally. Stay tuned for an easier documentation how to actually use it as an end user.
+
+CinePro Core is a scraper. This means it automatically navigates through third-party streaming websites to retrieve direct streaming links while bypassing ads and scam redirects.
+
+Because this process consumes computing resources, publicly exposed instances may be vulnerable to abuse or (D)DOS attacks, which can significantly increase hosting costs.
+
+We strongly recommend running CinePro Core locally. More end-user documentation and setup guides will be released soon.
+
 </details>
 
 ## Quick Start
 
-**Prerequisites:** Node.js 20+, a [TMDB API key](https://www.themoviedb.org/settings/api)
+**Prerequisites:** Node.js 20+ and a [TMDB API key](https://www.themoviedb.org/settings/api)
 
 ```bash
 git clone https://github.com/cinepro-org/core.git && cd core
 npm install
-cp .env.example .env   # add your TMDB_API_KEY and configure more options if you want
+cp .env.example .env   # add your TMDB_API_KEY and configure additional options if needed
 npm run dev            # http://localhost:3000
-```
+````
 
-For Docker, production setup, and full configuration options → **[Quickstart](https://docs.cinepro.cc/quickstart)**
+For Docker, production deployment, and advanced configuration options → **[Quickstart](https://docs.cinepro.cc/quickstart)**
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Features
 
-- 🎯 **OMSS-Compliant** – follows the Open Media Streaming Standard
-- 🔌 **Modular Providers** – drop-in provider system with auto-discovery
-- 🛡️ **Type-Safe** – full TypeScript with strict mode
-- ⚡ **Production-Ready** – Redis caching, Docker, error handling
-- 🎬 **Multi-Source** – movies and TV shows from multiple providers
-- 📺 **Stremio Compatibility** - with the `STREMIO_ADDON` env variable you can enable a stremio addon at `/stremio/manifest.json` which you can add to your stremio client
-- (roadmap end of 2026) 📦 **CineHome Integration** – works with CineHome download automation
+* 🎯 **OMSS-Compliant** – follows the Open Media Streaming Standard
+* 🔌 **Modular Providers** – drop-in provider system with auto-discovery
+* 🛡️ **Type-Safe** – built with strict TypeScript
+* ⚡ **Production-Ready** – Redis caching, Docker support, and robust error handling
+* 🎬 **Multi-Source Streaming** – resolves movies and TV shows from multiple providers
+* 📺 **Stremio Compatibility** – enable a Stremio addon using the `STREMIO_ADDON` environment variable at `/stremio/manifest.json`
+* 📦 **CineHome Integration** *(planned for late 2026)* – compatible with CineHome download automation
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Documentation
 
-Full docs, API reference, configuration guide, and provider development at **[the CinePro Docs](https://docs.cinepro.cc)**.
+Full documentation, API references, configuration guides, and provider development resources are available at **[CinePro Docs](https://docs.cinepro.cc)**.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ## Contributing
 
-PRs are welcome — especially new providers, bug fixes, and docs improvements.  
-See the [Documentation](https://docs.cinepro.cc/core/general-information/development) and the [Contributing Guideline](https://github.com/cinepro-org/core?tab=contributing-ov-file#contributing-to-cinepro-core) for details.
+Pull requests are welcome — especially for new providers, bug fixes, and documentation improvements.
 
-### Top contributors:
+See the [Documentation](https://docs.cinepro.cc/core/general-information/development) and the [Contributing Guidelines](https://github.com/cinepro-org/core?tab=contributing-ov-file#contributing-to-cinepro-core) for more information.
+
+### Top Contributors
 
 <a href="https://github.com/cinepro-org/core/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=cinepro-org/core" alt="contrib.rocks image" />
 </a>
 
-*Join now by contributing!*
+*Join the project by contributing!*
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
-
 
 ## Graphs
 
@@ -100,9 +110,12 @@ See the [Documentation](https://docs.cinepro.cc/core/general-information/develop
 
 ## License
 
-PolyForm Noncommercial License 1.0.0 © CinePro Organization — see [LICENSE](LICENSE) for details.  
-This software does not host, store, or distribute any copyrighted content.
-ANY DMCA Complaints should be opened at the hosting provider and not directed at us.
+PolyForm Noncommercial License 1.0.0 © CinePro Organization — see [LICENSE](LICENSE) for details.
+
+This software does not host, store, or distribute copyrighted content.
+
+Any DMCA complaints should be directed to the hosting provider, not to us.
+
 [Read more here](https://docs.cinepro.cc/core/general-information/license)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

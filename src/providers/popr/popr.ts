@@ -94,7 +94,7 @@ export class PoprProvider extends BaseProvider {
                     const t = l.trim();
                     return t && !t.startsWith('#');
                 });
-                
+
                 if (segmentLines.length === 0) {
                     return { isValid: false, type: 'hls' };
                 }
@@ -145,61 +145,56 @@ export class PoprProvider extends BaseProvider {
             );
         };
 
-        const requests = servers.map(
-            (server) =>
-                fetch(buildUrl(server), {
-                    headers: this.HEADERS
-                })
-                    .then(async (res) => {
-                        if (res.status !== 200) return null;
-                        
-                        const data = (await res.json()) as VidnestResponse;
-                        const stream = data?.results?.[0]?.streams?.[0];
-                        
-                        if (!stream?.url) return null;
+        const requests = servers.map((server) =>
+            fetch(buildUrl(server), {
+                headers: this.HEADERS
+            }).then(async (res) => {
+                if (res.status !== 200) return null;
 
-                        const streamHeaders = stream.headers || {};
-                        const { isValid, type } = await this.checkStreamType(
-                            stream.url,
-                            streamHeaders,
-                            server
-                        );
+                const data = (await res.json()) as VidnestResponse;
+                const stream = data?.results?.[0]?.streams?.[0];
 
-                        if (!isValid) return null;
+                if (!stream?.url) return null;
 
-                        const quality = stream.quality;
-                        const INVALID_QUALITIES = ['Hindi', 'English', 'MAIN'];
-                        const QUALITIES = ['Hindi', 'English'];
-                        const languages = QUALITIES.includes(quality);
+                const streamHeaders = stream.headers || {};
+                const { isValid, type } = await this.checkStreamType(
+                    stream.url,
+                    streamHeaders,
+                    server
+                );
 
-                        const proxyHeaders = {
-                            ...this.HEADERS,
-                            ...streamHeaders
-                        };
+                if (!isValid) return null;
 
-                        return {
-                            source: {
-                                url: this.createProxyUrl(
-                                    stream.url,
-                                    proxyHeaders
-                                ),
-                                type,
-                                quality: INVALID_QUALITIES.includes(quality)
-                                    ? 'auto'
-                                    : quality || 'auto',
-                                audioTracks: [
-                                    {
-                                        language: languages
-                                            ? quality.toLowerCase().slice(0, 3)
-                                            : 'eng',
-                                        label: languages ? quality : 'English'
-                                    }
-                                ],
-                                provider: { name: this.name, id: this.id }
-                            },
-                            subtitles: data.results?.[0]?.subtitles || []
-                        };
-                    })
+                const quality = stream.quality;
+                const INVALID_QUALITIES = ['Hindi', 'English', 'MAIN'];
+                const QUALITIES = ['Hindi', 'English'];
+                const languages = QUALITIES.includes(quality);
+
+                const proxyHeaders = {
+                    ...this.HEADERS,
+                    ...streamHeaders
+                };
+
+                return {
+                    source: {
+                        url: this.createProxyUrl(stream.url, proxyHeaders),
+                        type,
+                        quality: INVALID_QUALITIES.includes(quality)
+                            ? 'auto'
+                            : quality || 'auto',
+                        audioTracks: [
+                            {
+                                language: languages
+                                    ? quality.toLowerCase().slice(0, 3)
+                                    : 'eng',
+                                label: languages ? quality : 'English'
+                            }
+                        ],
+                        provider: { name: this.name, id: this.id }
+                    },
+                    subtitles: data.results?.[0]?.subtitles || []
+                };
+            })
         );
 
         const results = await Promise.allSettled(requests);

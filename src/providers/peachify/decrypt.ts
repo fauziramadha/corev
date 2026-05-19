@@ -55,7 +55,7 @@ function hexToBytes(hex: string): Uint8Array {
 async function importDecryptionKey(): Promise<webcrypto.CryptoKey> {
     return subtle.importKey(
         'raw',
-        hexToBytes(Buffer.from(ENCRYPTION_KEY_HEX, "base64").toString()),
+        hexToBytes(Buffer.from(ENCRYPTION_KEY_HEX, 'base64').toString()),
         { name: 'AES-GCM' },
         false,
         ['decrypt']

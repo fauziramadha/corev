@@ -198,93 +198,14 @@ jobs:
             -t "$IMAGE:latest" \
             "$AMD64_IMAGE" "$ARM64_IMAGE"
 
-      - name: Generate categorized release notes
-        id: release_notes
-        run: |
-          CURRENT_TAG="${{ needs.prepare.outputs.app_version }}"
-          PREV_TAG="${{ needs.prepare.outputs.previous_tag }}"
-          if [ -n "$PREV_TAG" ]; then
-            HASHES=$(git log --pretty=format:"%H" "$PREV_TAG"..origin/main)
-            echo "Commits since $PREV_TAG:"
-          else
-            HASHES=$(git log --pretty=format:"%H" origin/main -n 50)
-            echo "No previous tag found, using last 50 commits on main"
-          fi
-          
-          FEATURES=""
-          FIXES=""
-          DOCS=""
-          CHORES=""
-          BREAKING=""
-          OTHERS=""
-          
-          while IFS= read -r hash; do
-            # Get first line only, escape for bash/YAML safely
-            message=$(git log --format=%s -n 1 "$hash" | head -n1 | sed 's/"/\\"/g; s/`/\\`/g; s/$/\n/g')
-            short_hash=$(git log --format=%h -n 1 "$hash")
-            
-            echo "Processing: '$message' ($short_hash)"
-            
-            # Safe prefix extraction
-            if echo "$message" | grep -q '^[^:]*:'; then
-              clean_message=$(echo "$message" | sed 's/^[^:]*: *//')
-            else
-              clean_message="$message"
-            fi
-            
-            REPO_URL="${{ github.server_url }}/${{ github.repository }}"
-            LINK="[${clean_message}](${REPO_URL}/commit/${short_hash})"
-            
-            case "$message" in
-              feat:*|feat\(*|feature:*)
-                FEATURES="${FEATURES}- feat: ${LINK}"
-                ;;
-              fix:*|fix\(*)
-                FIXES="${FIXES}- fix: ${LINK}"
-                ;;
-              docs:*|docs\(*)
-                DOCS="${DOCS}- docs: ${LINK}"
-                ;;
-              chore:*|chore\(*|ci:*|ci\(*|build:*|build\(*)
-                CHORES="${CHORES}- chore: ${LINK}"
-                ;;
-              *BREAKING*|*breaking*|*!:*)
-                BREAKING="${BREAKING}- breaking change: [${message}](${REPO_URL}/commit/${short_hash})"
-                ;;
-              *)
-                OTHERS="${OTHERS}- ${LINK}"
-                ;;
-            esac
-          done <<< "$HASHES"
-
-          NOTES="## Release $CURRENT_TAG"
-          if [ -n "$PREV_TAG" ]; then
-            NOTES="${NOTES}Changes since \`${PREV_TAG}\`:"
-          fi
-          NOTES="${NOTES}Release commit: [\`${{ github.event.workflow_run.head_sha || github.sha }}\`](${REPO_URL}/commit/${{ github.event.workflow_run.head_sha || github.sha }})."
-
-          [ -n "$BREAKING" ] && NOTES="${NOTES}### ⚠️ Breaking Changes$(printf %s "$BREAKING")"
-          [ -n "$FEATURES" ] && NOTES="${NOTES}### ✨ Features$(printf %s "$FEATURES")"
-          [ -n "$FIXES" ] && NOTES="${NOTES}### 🐛 Bug Fixes$(printf %s "$FIXES")"
-          [ -n "$DOCS" ] && NOTES="${NOTES}### 📚 Documentation$(printf %s "$DOCS")"
-          [ -n "$CHORES" ] && NOTES="${NOTES}### 🔧 Maintenance$(printf %s "$CHORES")"
-          [ -n "$OTHERS" ] && NOTES="${NOTES}### 📦 Other Changes$(printf %s "$OTHERS")"
-
-          NOTES="${NOTES}## Quick startStart the latest version:\`\`\`bashdocker run --name cinepro-core-${{ needs.prepare.outputs.app_version }} -p 3000:3000 -e TMDB_API_KEY=your-tmdb-key ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LC }}:latest\`\`\`## For more details, check the [CinePro documentation](https://docs.cinepro.cc) and the [Version History](https://docs.cinepro.cc/core/versions)."
-
-          {
-            echo "notes<<EOF"
-            printf '%s\n' "$NOTES"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2.5.0
-        with:
-          name: Release ${{ needs.prepare.outputs.app_version }}
-          body: ${{ steps.release_notes.outputs.notes }}
-          draft: false
-          generate_release_notes: false
-          tag_name: ${{ needs.prepare.outputs.app_version }}
-          prerelease: false
+      - name: Create GitHub release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ needs.prepare.outputs.app_version }}"
+
+          gh release view "$TAG" >/dev/null 2>&1 || \
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            --latest

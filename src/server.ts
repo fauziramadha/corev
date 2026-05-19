@@ -92,9 +92,10 @@ async function main() {
         '🤝 We are looking for contributors to improve and develop!';
     const repo = 'Contribute: https://github.com/cinepro-org/ui';
     const tryIt = `🌐 Try it out: ${uiUrl} !`;
-    const note = "You will need to give the website \"access to local applications\" that it works."
+    const note =
+        'You will need to give the website "access to local applications" that it works.';
 
-    const lines = [title, '', repo, '', contrib, '', tryIt, "", note];
+    const lines = [title, '', repo, '', contrib, '', tryIt, '', note];
 
     // compute box width based on longest line
     const width = Math.max(...lines.map((l) => l.length)) + 2;

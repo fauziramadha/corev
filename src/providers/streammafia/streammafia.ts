@@ -28,24 +28,6 @@ export class StreamMafiaProvider extends BaseProvider {
         'x-api-token': '',
         'x-content-id': ''
     };
-    readonly PLAY_HEADERS = {
-        accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'accept-language': 'en-US,en;q=0.7',
-        'cache-control': 'no-cache',
-        pragma: 'no-cache',
-        priority: 'u=0, i',
-        'sec-ch-ua': '"(Not(A:Brand";v="99", "Microsoft Edge";v="133"',
-        'sec-ch-ua-full-version-list':
-            '"(Not(A:Brand";v="99.0.0.0", "Microsoft Edge";v="133"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Linux"',
-        'sec-fetch-dest': 'document',
-        'sec-fetch-mode': 'navigate',
-        'sec-fetch-site': 'none',
-        'sec-fetch-user': '?1',
-        'sec-gpc': '1',
-        'upgrade-insecure-requests': '1'
-    };
 
     readonly capabilities: ProviderCapabilities = {
         supportedContentTypes: ['movies', 'tv']
@@ -240,7 +222,9 @@ export class StreamMafiaProvider extends BaseProvider {
             const parsed = await this.parseHLS(api.stream.hls_streaming);
 
             sources.push({
-                url: this.createProxyUrl(api.stream.hls_streaming, {"User-Agent": ""}),
+                url: this.createProxyUrl(api.stream.hls_streaming, {
+                    'User-Agent': ''
+                }),
                 type: 'hls',
                 quality: parsed.quality || 'auto',
                 audioTracks:
@@ -256,7 +240,9 @@ export class StreamMafiaProvider extends BaseProvider {
 
         for (const download of api.stream?.download ?? []) {
             sources.push({
-                url: this.createProxyUrl(api.stream.hls_streaming, {"User-Agent": ""}),
+                url: this.createProxyUrl(api.stream.hls_streaming, {
+                    'User-Agent': ''
+                }),
                 type: this.inferSourceType(download.url),
                 quality: this.normalizeQuality(download.quality, 'Auto'),
                 audioTracks: [fallbackAudio],

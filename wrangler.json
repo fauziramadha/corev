@@ -1,5 +1,5 @@
 {
-    "name": "cinepro-core",
+    "name": "zeeoskop-core",
     "main": "dist/server.js",
     "compatibility_date": "2026-05-24",
     "build": {

@@ -27,7 +27,7 @@ jobs:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         run: |
-          echo "$TMDB_API_KEY" | npx wrangler secret put TMDB_API_KEY --name zeeoskop-core -c wrangler.json
-          echo "$TURSO_DATABASE_URL" | npx wrangler secret put TURSO_DATABASE_URL --name zeeoskop-core -c wrangler.json
-          echo "$TURSO_AUTH_TOKEN" | npx wrangler secret put TURSO_AUTH_TOKEN --name zeeoskop-core -c wrangler.json
+          echo "$TMDB_API_KEY" | npx wrangler secret put TMDB_API_KEY --name zeeoskop-corev -c wrangler.json
+          echo "$TURSO_DATABASE_URL" | npx wrangler secret put TURSO_DATABASE_URL --name zeeoskop-corev -c wrangler.json
+          echo "$TURSO_AUTH_TOKEN" | npx wrangler secret put TURSO_AUTH_TOKEN --name zeeoskop-corev -c wrangler.json
           npx wrangler deploy -c wrangler.json

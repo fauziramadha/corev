@@ -11,11 +11,23 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          secrets: TMDB_API_KEY
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Upload Secrets & Deploy Worker
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          echo "$TMDB_API_KEY" | npx wrangler secret put TMDB_API_KEY --name zeeoskop-core -c wrangler.json
+          echo "$TURSO_DATABASE_URL" | npx wrangler secret put TURSO_DATABASE_URL --name zeeoskop-core -c wrangler.json
+          echo "$TURSO_AUTH_TOKEN" | npx wrangler secret put TURSO_AUTH_TOKEN --name zeeoskop-core -c wrangler.json
+          npx wrangler deploy -c wrangler.json

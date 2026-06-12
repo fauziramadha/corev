@@ -1,17 +1,16 @@
 {
   "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "dist/server.js",
-      "use": "@vercel/node"
+      "source": "/(.*)",
+      "destination": "/dist/server.js"
     }
   ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/dist/server.js"
+  "functions": {
+    "dist/server.js": {
+      "runtime": "nodejs20.x"
     }
-  ],
+  },
   "env": {
     "NODE_ENV": "production",
     "CACHE_TYPE": "memory",

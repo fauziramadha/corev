@@ -68,10 +68,13 @@ export class VidRockProvider extends BaseProvider {
             const sources: Source[] = [];
             const cleanOrigin = this.BASE_URL.replace(/\/$/, '');
 
-            for (const [_, stream] of Object.entries(resp)) {
+            // PATCH: Menangkap nama server (Nova, Atlas, dll) dari response
+            for (const [serverName, stream] of Object.entries(resp)) {
                 if (!stream?.url) continue;
 
                 let finalUrl: string;
+                // PATCH: Merakit nama provider agar tidak tertumpuk di lobi
+                const providerName = `${this.name} - ${serverName}`;
 
                 // Logika khusus Film Asia lama (hls2)
                 if (stream.url.includes('hls2.vdrk.site')) {
@@ -114,7 +117,7 @@ export class VidRockProvider extends BaseProvider {
                                     label: stream.language ?? 'Unknown'
                                 }
                             ],
-                            provider: { id: this.id, name: this.name }
+                            provider: { id: this.id, name: providerName } // Menggunakan nama spesifik
                         });
                     });
 
@@ -125,12 +128,9 @@ export class VidRockProvider extends BaseProvider {
 
                     // Deteksi server Asia baru dari log (storrrrrrm.site & hellstorm.lol)
                     if (stream.url.includes('storrrrrrm.site') || stream.url.includes('hellstorm.lol')) {
-                        this.logSafe('Applying Asian Headers (Loklok) to new CDN', stream.url);
-                        headersToProxy = {
-                            ...this.HEADERS,
-                            Referer: 'https://lok-lok.cc/',
-                            Origin: 'https://lok-lok.cc'
-                        };
+                        // KITA CABUT HEADER LOKLOK KARENA INI CDN PRIBADI VIDROCK
+                        this.logSafe('Applying Standard Headers to new CDN', stream.url);
+                        headersToProxy = { ...this.HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
                     } else if (stream.url.includes('67streams')) {
                         headersToProxy = {
                               Referer: this.BASE_URL,
@@ -157,7 +157,7 @@ export class VidRockProvider extends BaseProvider {
                             label: stream.language ?? 'Unknown'
                         }
                     ],
-                    provider: { id: this.id, name: this.name }
+                    provider: { id: this.id, name: providerName } // Menggunakan nama spesifik
                 });
             }
 

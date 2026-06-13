@@ -73,7 +73,7 @@ export class VidRockProvider extends BaseProvider {
 
                 let finalUrl: string;
 
-                // Logika khusus Film Asia (Loklok/hls2)
+                // Logika khusus Film Asia lama (hls2)
                 if (stream.url.includes('hls2.vdrk.site')) {
                     this.logSafe('Processing Asian Stream (hls2)', stream.url);
                     const secondData = (await this.fetchPage(stream.url)) as
@@ -120,22 +120,34 @@ export class VidRockProvider extends BaseProvider {
 
                     continue;
                 } else {
-                    // Logika Film Barat / Umum
-                    const headersToProxy = stream.url.includes('67streams')
-                        ? {
+                    // PATCH: Logika Film Barat / Umum & Server Asia Baru
+                    let headersToProxy;
+
+                    // Deteksi server Asia baru dari log (storrrrrrm.site & hellstorm.lol)
+                    if (stream.url.includes('storrrrrrm.site') || stream.url.includes('hellstorm.lol')) {
+                        this.logSafe('Applying Asian Headers (Loklok) to new CDN', stream.url);
+                        headersToProxy = {
+                            ...this.HEADERS,
+                            Referer: 'https://lok-lok.cc/',
+                            Origin: 'https://lok-lok.cc'
+                        };
+                    } else if (stream.url.includes('67streams')) {
+                        headersToProxy = {
                               Referer: this.BASE_URL,
                               Origin: cleanOrigin
-                          }
-                        : { ...this.HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
+                          };
+                    } else {
+                        headersToProxy = { ...this.HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
+                    }
 
                     finalUrl = this.createProxyUrl(stream.url, headersToProxy);
-                    this.logSafe('Generated Standard Proxy URL', finalUrl);
+                    this.logSafe('Generated Proxy URL', finalUrl);
                 }
 
                 sources.push({
                     url: finalUrl,
                     quality: '1080',
-                    type: 'hls',
+                    type: stream.url.includes('.mp4') ? 'mp4' : 'hls',
                     audioTracks: [
                         {
                             language:

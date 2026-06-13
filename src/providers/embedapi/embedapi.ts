@@ -20,13 +20,16 @@ export class EmbedApiProvider extends BaseProvider {
     readonly name = 'Embed API Backup';
     readonly enabled = true;
     
-    // PATCH 1: Mengubah nama variabel menjadi BASE_URL agar sesuai dengan aturan BaseProvider
     readonly BASE_URL = 'https://enc-dec.app/api';
     
+    // Taktik 1: Penyamaran Header Tingkat Tinggi untuk menembus Cloudflare (403)
     readonly HEADERS = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
-        Accept: 'application/json, text/javascript, */*; q=0.01',
-        'Accept-Language': 'en-US,en;q=0.9',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Upgrade-Insecure-Requests': '1',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
     };
 
     readonly capabilities: ProviderCapabilities = {
@@ -57,7 +60,6 @@ export class EmbedApiProvider extends BaseProvider {
 
         this.logSafe('Initiating Embed API Backup', `TMDB ID: ${media.tmdbId}`);
 
-        // Menjalankan keempat peretas secara serentak (Paralel)
         const promises = [
             this.handleVidfast(media),
             this.handleVidsync(media),
@@ -85,18 +87,24 @@ export class EmbedApiProvider extends BaseProvider {
     }
 
     // =====================================================================
-    // 1. VIDFAST HANDLER (POST /api/dec-vidfast)
+    // 1. VIDFAST HANDLER
     // =====================================================================
     private async handleVidfast(media: ProviderMediaObject) {
         try {
+            // Taktik 2: Koreksi Rute Vidfast (menghapus /embed/ untuk hindari 404)
             const url = media.type === 'movie' 
-                ? `${SITE_DOMAINS.vidfast}/embed/movie/${media.tmdbId}`
-                : `${SITE_DOMAINS.vidfast}/embed/tv/${media.tmdbId}/${media.s}/${media.e}`;
+                ? `${SITE_DOMAINS.vidfast}/movie/${media.tmdbId}`
+                : `${SITE_DOMAINS.vidfast}/tv/${media.tmdbId}/${media.s}/${media.e}`;
                 
             this.logSafe('Vidfast: Fetching Source', url);
-            const html = await this.fetchHTML(url);
+            const html = await this.fetchHTML(url, SITE_DOMAINS.vidfast);
             
-            const encryptedText = this.extractRegex(html, /['"]?file['"]?\s*:\s*['"]([^"]+)['"]/i) || this.extractRegex(html, /data-text="([^"]+)"/i);
+            const encryptedText = this.extractRegex(html, [
+                /['"]?file['"]?\s*:\s*['"]([^"]+)['"]/i, 
+                /data-text="([^"]+)"/i,
+                /id="enc"\s+value="([^"]+)"/i
+            ]);
+            
             if (!encryptedText) throw new Error('Vidfast: Encrypted text not found');
 
             const decryptUrl = `${this.BASE_URL}/dec-vidfast`;
@@ -106,14 +114,10 @@ export class EmbedApiProvider extends BaseProvider {
                 body: JSON.stringify({ text: encryptedText })
             });
             
-            // PATCH 2: Menambahkan "Type Assertion" agar TypeScript mengenali properti 'url'
             const data = (await response.json()) as { url?: string };
-
             if (!data || !data.url) throw new Error('Vidfast: Decryption failed');
 
-            return {
-                source: this.formatSource(data.url, 'Vidfast', SITE_DOMAINS.vidfast)
-            };
+            return { source: this.formatSource(data.url, 'Vidfast', SITE_DOMAINS.vidfast) };
         } catch (error) {
             this.logSafe('Vidfast Error', error instanceof Error ? error.message : error);
             return null;
@@ -121,7 +125,7 @@ export class EmbedApiProvider extends BaseProvider {
     }
 
     // =====================================================================
-    // 2. VIDSYNC HANDLER (POST /api/dec-vidsync | Requires text & id)
+    // 2. VIDSYNC HANDLER
     // =====================================================================
     private async handleVidsync(media: ProviderMediaObject) {
         try {
@@ -130,10 +134,18 @@ export class EmbedApiProvider extends BaseProvider {
                 : `${SITE_DOMAINS.vidsync}/tv/${media.tmdbId}/${media.s}/${media.e}`;
                 
             this.logSafe('Vidsync: Fetching Source', url);
-            const html = await this.fetchHTML(url);
+            const html = await this.fetchHTML(url, SITE_DOMAINS.vidsync);
             
-            const encryptedText = this.extractRegex(html, /data-text="([^"]+)"/i) || this.extractRegex(html, /['"]?encrypted['"]?\s*:\s*['"]([^"]+)['"]/i);
-            const videoId = this.extractRegex(html, /data-id="([^"]+)"/i) || this.extractRegex(html, /['"]?id['"]?\s*:\s*['"]([^"]+)['"]/i);
+            const encryptedText = this.extractRegex(html, [
+                /data-text="([^"]+)"/i, 
+                /['"]?encrypted['"]?\s*:\s*['"]([^"]+)['"]/i,
+                /<input[^>]+id="token"[^>]+value="([^"]+)"/i
+            ]);
+            
+            const videoId = this.extractRegex(html, [
+                /data-id="([^"]+)"/i, 
+                /['"]?id['"]?\s*:\s*['"]([^"]+)['"]/i
+            ]);
             
             if (!encryptedText || !videoId) throw new Error('Vidsync: Text or ID token not found');
 
@@ -144,14 +156,10 @@ export class EmbedApiProvider extends BaseProvider {
                 body: JSON.stringify({ text: encryptedText, id: videoId })
             });
             
-            // PATCH 2: Menambahkan "Type Assertion"
             const data = (await response.json()) as { url?: string };
-
             if (!data || !data.url) throw new Error('Vidsync: Decryption failed');
 
-            return {
-                source: this.formatSource(data.url, 'Vidsync', SITE_DOMAINS.vidsync)
-            };
+            return { source: this.formatSource(data.url, 'Vidsync', SITE_DOMAINS.vidsync) };
         } catch (error) {
             this.logSafe('Vidsync Error', error instanceof Error ? error.message : error);
             return null;
@@ -159,7 +167,7 @@ export class EmbedApiProvider extends BaseProvider {
     }
 
     // =====================================================================
-    // 3. ONETOUCHTV HANDLER (POST /api/dec-onetouchtv)
+    // 3. ONETOUCHTV HANDLER
     // =====================================================================
     private async handleOneTouchTV(media: ProviderMediaObject) {
         try {
@@ -168,9 +176,14 @@ export class EmbedApiProvider extends BaseProvider {
                 : `${SITE_DOMAINS.onetouchtv}/tv/${media.tmdbId}/${media.s}/${media.e}`;
                 
             this.logSafe('OneTouchTV: Fetching Source', url);
-            const html = await this.fetchHTML(url);
+            const html = await this.fetchHTML(url, SITE_DOMAINS.onetouchtv);
             
-            const encryptedText = this.extractRegex(html, /<input[^>]+id="token"[^>]+value="([^"]+)"/i) || this.extractRegex(html, /data-text="([^"]+)"/i);
+            const encryptedText = this.extractRegex(html, [
+                /<input[^>]+id="token"[^>]+value="([^"]+)"/i, 
+                /data-text="([^"]+)"/i,
+                /"token"\s*:\s*"([^"]+)"/i
+            ]);
+            
             if (!encryptedText) throw new Error('OneTouchTV: Encrypted token not found');
 
             const decryptUrl = `${this.BASE_URL}/dec-onetouchtv`;
@@ -180,14 +193,10 @@ export class EmbedApiProvider extends BaseProvider {
                 body: JSON.stringify({ text: encryptedText })
             });
             
-            // PATCH 2: Menambahkan "Type Assertion"
             const data = (await response.json()) as { url?: string };
-
             if (!data || !data.url) throw new Error('OneTouchTV: Decryption failed');
 
-            return {
-                source: this.formatSource(data.url, 'OneTouchTV', SITE_DOMAINS.onetouchtv)
-            };
+            return { source: this.formatSource(data.url, 'OneTouchTV', SITE_DOMAINS.onetouchtv) };
         } catch (error) {
             this.logSafe('OneTouchTV Error', error instanceof Error ? error.message : error);
             return null;
@@ -195,7 +204,7 @@ export class EmbedApiProvider extends BaseProvider {
     }
 
     // =====================================================================
-    // 4. VIDLINK HANDLER (GET /api/enc-vidlink?text=_____)
+    // 4. VIDLINK HANDLER
     // =====================================================================
     private async handleVidlink(media: ProviderMediaObject) {
         try {
@@ -204,22 +213,23 @@ export class EmbedApiProvider extends BaseProvider {
                 : `${SITE_DOMAINS.vidlink}/tv/${media.tmdbId}/${media.s}/${media.e}`;
                 
             this.logSafe('Vidlink: Fetching Source', url);
-            const html = await this.fetchHTML(url);
+            const html = await this.fetchHTML(url, SITE_DOMAINS.vidlink);
             
-            const encryptedText = this.extractRegex(html, /data-enc="([^"]+)"/i) || this.extractRegex(html, /['"]?encrypted['"]?\s*:\s*['"]([^"]+)['"]/i);
+            const encryptedText = this.extractRegex(html, [
+                /data-enc="([^"]+)"/i, 
+                /['"]?encrypted['"]?\s*:\s*['"]([^"]+)['"]/i,
+                /id="video-data"\s+value="([^"]+)"/i
+            ]);
+            
             if (!encryptedText) throw new Error('Vidlink: Encrypted text not found in HTML');
 
             const decryptUrl = `${this.BASE_URL}/enc-vidlink?text=${encodeURIComponent(encryptedText)}`;
             const response = await fetch(decryptUrl, { method: 'GET', headers: this.HEADERS });
             
-            // PATCH 2: Menambahkan "Type Assertion"
             const data = (await response.json()) as { url?: string };
-
             if (!data || !data.url) throw new Error('Vidlink: Decryption failed to return URL');
 
-            return {
-                source: this.formatSource(data.url, 'Vidlink', SITE_DOMAINS.vidlink)
-            };
+            return { source: this.formatSource(data.url, 'Vidlink', SITE_DOMAINS.vidlink) };
         } catch (error) {
             this.logSafe('Vidlink Error', error instanceof Error ? error.message : error);
             return null;
@@ -230,20 +240,48 @@ export class EmbedApiProvider extends BaseProvider {
     // Fungsi Bantuan (Helpers)
     // =====================================================================
     
-    private async fetchHTML(url: string): Promise<string> {
-        const response = await fetch(url, { headers: this.HEADERS });
+    // Taktik 3: Anjing Pelacak Iframe (Iframe Chaser)
+    private async fetchHTML(url: string, domain: string): Promise<string> {
+        const response = await fetch(url, { 
+            headers: { ...this.HEADERS, 'Referer': `${domain}/`, 'Origin': domain } 
+        });
+        
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.text();
+        let html = await response.text();
+
+        // Jika sandi disembunyikan di dalam iframe pemutar pihak ketiga, kejar dan buka iframenya
+        const iframeMatch = html.match(/<iframe[^>]+src="([^"]+)"/i);
+        if (iframeMatch) {
+            let iframeUrl = iframeMatch[1];
+            if (!iframeUrl.startsWith('http')) {
+                iframeUrl = iframeUrl.startsWith('/') ? `${domain}${iframeUrl}` : `${domain}/${iframeUrl}`;
+            }
+            this.logSafe('Chasing Iframe', iframeUrl);
+            try {
+                const iframeRes = await fetch(iframeUrl, { headers: { ...this.HEADERS, 'Referer': url } });
+                if (iframeRes.ok) {
+                    const iframeHtml = await iframeRes.text();
+                    html += "\n" + iframeHtml; // Gabungkan isi induk dan iframe
+                }
+            } catch (e) {
+                this.logSafe('Iframe Chase Failed', 'Could not open inner player');
+            }
+        }
+
+        return html;
     }
 
-    private extractRegex(html: string, pattern: RegExp): string | null {
-        const match = html.match(pattern);
-        return match ? match[1] : null;
+    // Ekstraktor array regex agar lebih tangguh menebak berbagai pola HTML
+    private extractRegex(html: string, patterns: RegExp[]): string | null {
+        for (const pattern of patterns) {
+            const match = html.match(pattern);
+            if (match && match[1]) return match[1];
+        }
+        return null;
     }
 
     private formatSource(finalUrl: string, serverName: string, originSite: string): Source {
         const isMp4 = finalUrl.toLowerCase().includes('.mp4');
-        
         const proxiedUrl = this.createProxyUrl(finalUrl, {
             ...this.HEADERS,
             Referer: `${originSite}/`,

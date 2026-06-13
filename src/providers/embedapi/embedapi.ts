@@ -20,8 +20,8 @@ export class EmbedApiProvider extends BaseProvider {
     readonly name = 'Embed API Backup';
     readonly enabled = true;
     
-    // Base URL untuk alat peretas (Decrypter)
-    readonly DECRYPT_API_URL = 'https://enc-dec.app/api';
+    // PATCH 1: Mengubah nama variabel menjadi BASE_URL agar sesuai dengan aturan BaseProvider
+    readonly BASE_URL = 'https://enc-dec.app/api';
     
     readonly HEADERS = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
@@ -96,17 +96,18 @@ export class EmbedApiProvider extends BaseProvider {
             this.logSafe('Vidfast: Fetching Source', url);
             const html = await this.fetchHTML(url);
             
-            // Ekstraksi token dari HTML
             const encryptedText = this.extractRegex(html, /['"]?file['"]?\s*:\s*['"]([^"]+)['"]/i) || this.extractRegex(html, /data-text="([^"]+)"/i);
             if (!encryptedText) throw new Error('Vidfast: Encrypted text not found');
 
-            const decryptUrl = `${this.DECRYPT_API_URL}/dec-vidfast`;
+            const decryptUrl = `${this.BASE_URL}/dec-vidfast`;
             const response = await fetch(decryptUrl, {
                 method: 'POST',
                 headers: { ...this.HEADERS, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: encryptedText })
             });
-            const data = await response.json();
+            
+            // PATCH 2: Menambahkan "Type Assertion" agar TypeScript mengenali properti 'url'
+            const data = (await response.json()) as { url?: string };
 
             if (!data || !data.url) throw new Error('Vidfast: Decryption failed');
 
@@ -131,19 +132,20 @@ export class EmbedApiProvider extends BaseProvider {
             this.logSafe('Vidsync: Fetching Source', url);
             const html = await this.fetchHTML(url);
             
-            // Mencari dua parameter krusial: text dan id
             const encryptedText = this.extractRegex(html, /data-text="([^"]+)"/i) || this.extractRegex(html, /['"]?encrypted['"]?\s*:\s*['"]([^"]+)['"]/i);
             const videoId = this.extractRegex(html, /data-id="([^"]+)"/i) || this.extractRegex(html, /['"]?id['"]?\s*:\s*['"]([^"]+)['"]/i);
             
             if (!encryptedText || !videoId) throw new Error('Vidsync: Text or ID token not found');
 
-            const decryptUrl = `${this.DECRYPT_API_URL}/dec-vidsync`;
+            const decryptUrl = `${this.BASE_URL}/dec-vidsync`;
             const response = await fetch(decryptUrl, {
                 method: 'POST',
                 headers: { ...this.HEADERS, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: encryptedText, id: videoId })
             });
-            const data = await response.json();
+            
+            // PATCH 2: Menambahkan "Type Assertion"
+            const data = (await response.json()) as { url?: string };
 
             if (!data || !data.url) throw new Error('Vidsync: Decryption failed');
 
@@ -168,17 +170,18 @@ export class EmbedApiProvider extends BaseProvider {
             this.logSafe('OneTouchTV: Fetching Source', url);
             const html = await this.fetchHTML(url);
             
-            // Ekstraksi token dari HTML
             const encryptedText = this.extractRegex(html, /<input[^>]+id="token"[^>]+value="([^"]+)"/i) || this.extractRegex(html, /data-text="([^"]+)"/i);
             if (!encryptedText) throw new Error('OneTouchTV: Encrypted token not found');
 
-            const decryptUrl = `${this.DECRYPT_API_URL}/dec-onetouchtv`;
+            const decryptUrl = `${this.BASE_URL}/dec-onetouchtv`;
             const response = await fetch(decryptUrl, {
                 method: 'POST',
                 headers: { ...this.HEADERS, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: encryptedText })
             });
-            const data = await response.json();
+            
+            // PATCH 2: Menambahkan "Type Assertion"
+            const data = (await response.json()) as { url?: string };
 
             if (!data || !data.url) throw new Error('OneTouchTV: Decryption failed');
 
@@ -203,13 +206,14 @@ export class EmbedApiProvider extends BaseProvider {
             this.logSafe('Vidlink: Fetching Source', url);
             const html = await this.fetchHTML(url);
             
-            // Ekstraksi token dari HTML
             const encryptedText = this.extractRegex(html, /data-enc="([^"]+)"/i) || this.extractRegex(html, /['"]?encrypted['"]?\s*:\s*['"]([^"]+)['"]/i);
             if (!encryptedText) throw new Error('Vidlink: Encrypted text not found in HTML');
 
-            const decryptUrl = `${this.DECRYPT_API_URL}/enc-vidlink?text=${encodeURIComponent(encryptedText)}`;
+            const decryptUrl = `${this.BASE_URL}/enc-vidlink?text=${encodeURIComponent(encryptedText)}`;
             const response = await fetch(decryptUrl, { method: 'GET', headers: this.HEADERS });
-            const data = await response.json();
+            
+            // PATCH 2: Menambahkan "Type Assertion"
+            const data = (await response.json()) as { url?: string };
 
             if (!data || !data.url) throw new Error('Vidlink: Decryption failed to return URL');
 
@@ -270,7 +274,7 @@ export class EmbedApiProvider extends BaseProvider {
 
     async healthCheck(): Promise<boolean> {
         try {
-            const response = await fetch(`${this.DECRYPT_API_URL}/enc-vidlink?text=ping`, { method: 'GET' });
+            const response = await fetch(`${this.BASE_URL}/enc-vidlink?text=ping`, { method: 'GET' });
             return response.status === 200 || response.status === 400;
         } catch {
             return false;

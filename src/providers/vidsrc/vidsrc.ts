@@ -11,7 +11,7 @@ export class VidSrcProvider extends BaseProvider {
     readonly id = 'vidsrc';
     readonly name = 'VidSrc';
     readonly enabled = true;
-    readonly BASE_URL = 'https://vidsrcme.ru/';
+    readonly BASE_URL = 'https://vidsrcme.ru';
     readonly HEADERS = {
         'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
@@ -37,46 +37,54 @@ export class VidSrcProvider extends BaseProvider {
     }
 
     /**
-     * Main scraping logic
+     * Main scraping logic with CCTV Debugging
      */
     private async getSources(
         media: ProviderMediaObject
     ): Promise<ProviderResult> {
         try {
             const pageUrl = this.buildPageUrl(media);
+            console.log(`[VidSrc Debug] 1. Menuju Ruang Tamu: ${pageUrl}`);
 
             const html = await this.fetchPage(pageUrl, media);
             if (!html) {
+                console.log(`[VidSrc Debug] ERROR: Ruang Tamu dikunci (Gagal fetch halaman pertama)`);
                 return this.emptyResult('Failed to fetch page', media);
             }
 
             const secondUrl = this.extractSecondUrl(html);
             if (!secondUrl) {
+                console.log(`[VidSrc Debug] ERROR: Brankas Iframe tidak ditemukan di Ruang Tamu`);
                 return this.emptyResult('Invalid or expired token', media);
             }
+            console.log(`[VidSrc Debug] 2. Menuju Brankas Iframe: ${secondUrl.url}`);
 
             const secondHtml = await this.fetchPage(secondUrl.url, media);
             if (!secondHtml) {
+                console.log(`[VidSrc Debug] ERROR: Brankas Iframe kosong atau error`);
                 return this.emptyResult('Failed to fetch stream page', media);
             }
 
             const thirdUrl = this.extractThirdUrl(secondHtml, secondUrl.url);
             if (!thirdUrl) {
+                console.log(`[VidSrc Debug] ERROR: Gagal mengekstrak URL ketiga dari dalam Iframe`);
                 return this.emptyResult('Failed to extract stream URL', media);
             }
+            console.log(`[VidSrc Debug] 3. Menuju Server Video: ${thirdUrl.url}`);
 
             const thirdHtml = await this.fetchPage(thirdUrl.url, media);
             if (!thirdHtml) {
-                return this.emptyResult(
-                    'Failed to fetch final stream page',
-                    media
-                );
+                console.log(`[VidSrc Debug] ERROR: Server Video menolak akses`);
+                return this.emptyResult('Failed to fetch final stream page', media);
             }
 
             const m3u8Urls = this.extractM3u8Urls(thirdHtml);
             if (!m3u8Urls || m3u8Urls.length === 0) {
+                console.log(`[VidSrc Debug] ERROR: Mesin pengekstrak M3U8 (Regex) meleset/usang!`);
                 return this.emptyResult('Failed to extract m3u8 URLs', media);
             }
+
+            console.log(`[VidSrc Debug] SUKSES! Ditemukan ${m3u8Urls.length} link video.`);
 
             const sources: Source[] = m3u8Urls.map((url) => ({
                 url: this.createProxyUrl(url, {
@@ -104,6 +112,7 @@ export class VidSrcProvider extends BaseProvider {
                 diagnostics: []
             };
         } catch (error) {
+            console.log(`[VidSrc Debug] FATAL ERROR:`, error);
             return this.emptyResult(
                 error instanceof Error
                     ? error.message

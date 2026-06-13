@@ -7,13 +7,12 @@ import type {
     Subtitle
 } from '@omss/framework';
 
-// Konfigurasi Domain Sumber (Bisa diubah jika domain mereka berganti)
+// Konfigurasi Domain Sumber 4 Server Utama
 const SITE_DOMAINS = {
-    vidlink: 'https://vidlink.pro',
-    moviesFlix: 'https://movies-flix.com',
-    vidfast: 'https://vidfast.co',
-    lordflix: 'https://lordflix.com',
-    onetouchtv: 'https://onetouchtv.me'
+    vidfast: 'https://vidfast.pro',
+    vidsync: 'https://vidsync.xyz',
+    onetouchtv: 'https://onetouchtv.xyz',
+    vidlink: 'https://vidlink.pro'
 };
 
 export class EmbedApiProvider extends BaseProvider {
@@ -58,13 +57,12 @@ export class EmbedApiProvider extends BaseProvider {
 
         this.logSafe('Initiating Embed API Backup', `TMDB ID: ${media.tmdbId}`);
 
-        // Menjalankan kelima peretas secara serentak (Paralel) agar cepat
+        // Menjalankan keempat peretas secara serentak (Paralel)
         const promises = [
-            this.handleVidlink(media),
-            this.handleMoviesFlix(media),
             this.handleVidfast(media),
-            this.handleLordflix(media),
-            this.handleOneTouchTV(media)
+            this.handleVidsync(media),
+            this.handleOneTouchTV(media),
+            this.handleVidlink(media)
         ];
 
         const results = await Promise.allSettled(promises);
@@ -87,74 +85,7 @@ export class EmbedApiProvider extends BaseProvider {
     }
 
     // =====================================================================
-    // 1. VIDLINK HANDLER (GET /api/enc-vidlink?text=_____)
-    // =====================================================================
-    private async handleVidlink(media: ProviderMediaObject) {
-        try {
-            const url = media.type === 'movie' 
-                ? `${SITE_DOMAINS.vidlink}/movie/${media.tmdbId}`
-                : `${SITE_DOMAINS.vidlink}/tv/${media.tmdbId}/${media.s}/${media.e}`;
-                
-            this.logSafe('Vidlink: Fetching Source', url);
-            const html = await this.fetchHTML(url);
-            
-            // Mencari teks acak (Kunci ini bisa disesuaikan dengan struktur asli Vidlink)
-            const encryptedText = this.extractRegex(html, /data-enc="([^"]+)"/i) || this.extractRegex(html, /['"]?encrypted['"]?\s*:\s*['"]([^"]+)['"]/i);
-            if (!encryptedText) throw new Error('Vidlink: Encrypted text not found in HTML');
-
-            this.logSafe('Vidlink: Decrypting', `Text length: ${encryptedText.length}`);
-            
-            // Sesuai Instruksi: Menggunakan GET request
-            const decryptUrl = `${this.DECRYPT_API_URL}/enc-vidlink?text=${encodeURIComponent(encryptedText)}`;
-            const response = await fetch(decryptUrl, { method: 'GET', headers: this.HEADERS });
-            const data = await response.json();
-
-            if (!data || !data.url) throw new Error('Vidlink: Decryption failed to return URL');
-
-            return {
-                source: this.formatSource(data.url, 'Vidlink', SITE_DOMAINS.vidlink)
-            };
-        } catch (error) {
-            this.logSafe('Vidlink Error', error instanceof Error ? error.message : error);
-            return null;
-        }
-    }
-
-    // =====================================================================
-    // 2. MOVIES-FLIX HANDLER (POST /api/dec-movies-flix)
-    // =====================================================================
-    private async handleMoviesFlix(media: ProviderMediaObject) {
-        try {
-            const url = media.type === 'movie' 
-                ? `${SITE_DOMAINS.moviesFlix}/movie/${media.tmdbId}`
-                : `${SITE_DOMAINS.moviesFlix}/tv/${media.tmdbId}/${media.s}/${media.e}`;
-                
-            const html = await this.fetchHTML(url);
-            const encryptedText = this.extractRegex(html, /id="flix-data"\s+value="([^"]+)"/i) || this.extractRegex(html, /sourceData\s*=\s*['"]([^"]+)['"]/i);
-            if (!encryptedText) throw new Error('MoviesFlix: Encrypted text not found');
-
-            // Sesuai Instruksi: Menggunakan POST request dengan body JSON
-            const decryptUrl = `${this.DECRYPT_API_URL}/dec-movies-flix`;
-            const response = await fetch(decryptUrl, {
-                method: 'POST',
-                headers: { ...this.HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: encryptedText })
-            });
-            const data = await response.json();
-
-            if (!data || !data.url) throw new Error('MoviesFlix: Decryption failed');
-
-            return {
-                source: this.formatSource(data.url, 'Movies-Flix', SITE_DOMAINS.moviesFlix)
-            };
-        } catch (error) {
-            this.logSafe('MoviesFlix Error', error instanceof Error ? error.message : error);
-            return null;
-        }
-    }
-
-    // =====================================================================
-    // 3. VIDFAST HANDLER (POST /api/dec-vidfast)
+    // 1. VIDFAST HANDLER (POST /api/dec-vidfast)
     // =====================================================================
     private async handleVidfast(media: ProviderMediaObject) {
         try {
@@ -162,11 +93,13 @@ export class EmbedApiProvider extends BaseProvider {
                 ? `${SITE_DOMAINS.vidfast}/embed/movie/${media.tmdbId}`
                 : `${SITE_DOMAINS.vidfast}/embed/tv/${media.tmdbId}/${media.s}/${media.e}`;
                 
+            this.logSafe('Vidfast: Fetching Source', url);
             const html = await this.fetchHTML(url);
-            const encryptedText = this.extractRegex(html, /['"]?file['"]?\s*:\s*['"]([^"]+)['"]/i);
+            
+            // Ekstraksi token dari HTML
+            const encryptedText = this.extractRegex(html, /['"]?file['"]?\s*:\s*['"]([^"]+)['"]/i) || this.extractRegex(html, /data-text="([^"]+)"/i);
             if (!encryptedText) throw new Error('Vidfast: Encrypted text not found');
 
-            // Sesuai Instruksi: Menggunakan POST request dengan body JSON
             const decryptUrl = `${this.DECRYPT_API_URL}/dec-vidfast`;
             const response = await fetch(decryptUrl, {
                 method: 'POST',
@@ -187,44 +120,44 @@ export class EmbedApiProvider extends BaseProvider {
     }
 
     // =====================================================================
-    // 4. LORDFLIX HANDLER (POST /api/dec-lordflix | Requires text & sign)
+    // 2. VIDSYNC HANDLER (POST /api/dec-vidsync | Requires text & id)
     // =====================================================================
-    private async handleLordflix(media: ProviderMediaObject) {
+    private async handleVidsync(media: ProviderMediaObject) {
         try {
             const url = media.type === 'movie' 
-                ? `${SITE_DOMAINS.lordflix}/embed/${media.tmdbId}`
-                : `${SITE_DOMAINS.lordflix}/embed/${media.tmdbId}/${media.s}/${media.e}`;
+                ? `${SITE_DOMAINS.vidsync}/movie/${media.tmdbId}`
+                : `${SITE_DOMAINS.vidsync}/tv/${media.tmdbId}/${media.s}/${media.e}`;
                 
+            this.logSafe('Vidsync: Fetching Source', url);
             const html = await this.fetchHTML(url);
             
-            // Mencari dua parameter yang dibutuhkan: text dan sign
-            const encryptedText = this.extractRegex(html, /data-text="([^"]+)"/i);
-            const signToken = this.extractRegex(html, /data-sign="([^"]+)"/i);
+            // Mencari dua parameter krusial: text dan id
+            const encryptedText = this.extractRegex(html, /data-text="([^"]+)"/i) || this.extractRegex(html, /['"]?encrypted['"]?\s*:\s*['"]([^"]+)['"]/i);
+            const videoId = this.extractRegex(html, /data-id="([^"]+)"/i) || this.extractRegex(html, /['"]?id['"]?\s*:\s*['"]([^"]+)['"]/i);
             
-            if (!encryptedText || !signToken) throw new Error('Lordflix: Text or Sign token not found');
+            if (!encryptedText || !videoId) throw new Error('Vidsync: Text or ID token not found');
 
-            // Sesuai Instruksi: Menggunakan POST request dengan 2 parameter JSON
-            const decryptUrl = `${this.DECRYPT_API_URL}/dec-lordflix`;
+            const decryptUrl = `${this.DECRYPT_API_URL}/dec-vidsync`;
             const response = await fetch(decryptUrl, {
                 method: 'POST',
                 headers: { ...this.HEADERS, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: encryptedText, sign: signToken })
+                body: JSON.stringify({ text: encryptedText, id: videoId })
             });
             const data = await response.json();
 
-            if (!data || !data.url) throw new Error('Lordflix: Decryption failed');
+            if (!data || !data.url) throw new Error('Vidsync: Decryption failed');
 
             return {
-                source: this.formatSource(data.url, 'Lordflix', SITE_DOMAINS.lordflix)
+                source: this.formatSource(data.url, 'Vidsync', SITE_DOMAINS.vidsync)
             };
         } catch (error) {
-            this.logSafe('Lordflix Error', error instanceof Error ? error.message : error);
+            this.logSafe('Vidsync Error', error instanceof Error ? error.message : error);
             return null;
         }
     }
 
     // =====================================================================
-    // 5. ONETOUCHTV HANDLER (POST /api/dec-onetouchtv)
+    // 3. ONETOUCHTV HANDLER (POST /api/dec-onetouchtv)
     // =====================================================================
     private async handleOneTouchTV(media: ProviderMediaObject) {
         try {
@@ -232,11 +165,13 @@ export class EmbedApiProvider extends BaseProvider {
                 ? `${SITE_DOMAINS.onetouchtv}/movie/${media.tmdbId}`
                 : `${SITE_DOMAINS.onetouchtv}/tv/${media.tmdbId}/${media.s}/${media.e}`;
                 
+            this.logSafe('OneTouchTV: Fetching Source', url);
             const html = await this.fetchHTML(url);
-            const encryptedText = this.extractRegex(html, /<input[^>]+id="token"[^>]+value="([^"]+)"/i);
+            
+            // Ekstraksi token dari HTML
+            const encryptedText = this.extractRegex(html, /<input[^>]+id="token"[^>]+value="([^"]+)"/i) || this.extractRegex(html, /data-text="([^"]+)"/i);
             if (!encryptedText) throw new Error('OneTouchTV: Encrypted token not found');
 
-            // Sesuai Instruksi: Menggunakan POST request dengan body JSON
             const decryptUrl = `${this.DECRYPT_API_URL}/dec-onetouchtv`;
             const response = await fetch(decryptUrl, {
                 method: 'POST',
@@ -257,27 +192,54 @@ export class EmbedApiProvider extends BaseProvider {
     }
 
     // =====================================================================
+    // 4. VIDLINK HANDLER (GET /api/enc-vidlink?text=_____)
+    // =====================================================================
+    private async handleVidlink(media: ProviderMediaObject) {
+        try {
+            const url = media.type === 'movie' 
+                ? `${SITE_DOMAINS.vidlink}/movie/${media.tmdbId}`
+                : `${SITE_DOMAINS.vidlink}/tv/${media.tmdbId}/${media.s}/${media.e}`;
+                
+            this.logSafe('Vidlink: Fetching Source', url);
+            const html = await this.fetchHTML(url);
+            
+            // Ekstraksi token dari HTML
+            const encryptedText = this.extractRegex(html, /data-enc="([^"]+)"/i) || this.extractRegex(html, /['"]?encrypted['"]?\s*:\s*['"]([^"]+)['"]/i);
+            if (!encryptedText) throw new Error('Vidlink: Encrypted text not found in HTML');
+
+            const decryptUrl = `${this.DECRYPT_API_URL}/enc-vidlink?text=${encodeURIComponent(encryptedText)}`;
+            const response = await fetch(decryptUrl, { method: 'GET', headers: this.HEADERS });
+            const data = await response.json();
+
+            if (!data || !data.url) throw new Error('Vidlink: Decryption failed to return URL');
+
+            return {
+                source: this.formatSource(data.url, 'Vidlink', SITE_DOMAINS.vidlink)
+            };
+        } catch (error) {
+            this.logSafe('Vidlink Error', error instanceof Error ? error.message : error);
+            return null;
+        }
+    }
+
+    // =====================================================================
     // Fungsi Bantuan (Helpers)
     // =====================================================================
     
-    // Fungsi untuk menarik HTML mentah dari situs sumber
     private async fetchHTML(url: string): Promise<string> {
         const response = await fetch(url, { headers: this.HEADERS });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return await response.text();
     }
 
-    // Fungsi ekstraksi regex standar untuk menarik token yang tersembunyi
     private extractRegex(html: string, pattern: RegExp): string | null {
         const match = html.match(pattern);
         return match ? match[1] : null;
     }
 
-    // Fungsi pembungkus URL hasil dekripsi menjadi format yang dikenali OMSS
     private formatSource(finalUrl: string, serverName: string, originSite: string): Source {
         const isMp4 = finalUrl.toLowerCase().includes('.mp4');
         
-        // Membungkus URL menggunakan Proxy Vercel agar terhindar dari CORS layar hitam
         const proxiedUrl = this.createProxyUrl(finalUrl, {
             ...this.HEADERS,
             Referer: `${originSite}/`,
@@ -307,10 +269,9 @@ export class EmbedApiProvider extends BaseProvider {
     }
 
     async healthCheck(): Promise<boolean> {
-        // Melakukan ping ringan ke API Enc-Dec untuk memastikan server pemecah sandi sedang hidup
         try {
             const response = await fetch(`${this.DECRYPT_API_URL}/enc-vidlink?text=ping`, { method: 'GET' });
-            return response.status === 200 || response.status === 400; // 400 berarti hidup tapi menolak 'ping'
+            return response.status === 200 || response.status === 400;
         } catch {
             return false;
         }

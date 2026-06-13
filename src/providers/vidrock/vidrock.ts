@@ -15,7 +15,7 @@ export class VidRockProvider extends BaseProvider {
     readonly id = 'vidrock';
     readonly name = 'VidRock';
     readonly enabled = true;
-    readonly BASE_URL = 'https://vidrock.net/';
+    readonly BASE_URL = 'https://vidrock.ru/'; // PATCH: Domain baru
     readonly SUB_BASE_URL = 'https://sub.vdrk.site';
     readonly HEADERS = {
         'User-Agent':
@@ -23,12 +23,22 @@ export class VidRockProvider extends BaseProvider {
         Accept: 'application/json, text/javascript, */*; q=0.01',
         'Accept-Language': 'en-US,en;q=0.9',
         Referer: this.BASE_URL,
-        Origin: this.BASE_URL
+        Origin: this.BASE_URL.replace(/\/$/, '') // PATCH: Origin tanpa trailing slash
     };
 
     readonly capabilities: ProviderCapabilities = {
         supportedContentTypes: ['movies', 'tv']
     };
+
+    // Fungsi Logger Aman
+    private logSafe(action: string, data: any) {
+        try {
+            const output = typeof data === 'string' ? data : JSON.stringify(data);
+            console.log(`[VidRock Debug] ${action}:`, output.length > 500 ? output.substring(0, 500) + '... (truncated)' : output);
+        } catch (e) {
+            console.log(`[VidRock Debug] ${action}: (Unloggable data)`);
+        }
+    }
 
     async getMovieSources(media: ProviderMediaObject): Promise<ProviderResult> {
         return this.getSources(media);
@@ -43,21 +53,29 @@ export class VidRockProvider extends BaseProvider {
     ): Promise<ProviderResult> {
         try {
             const pageUrl = await this.buildUrl(media);
+            this.logSafe('Fetching API URL', pageUrl);
+
             const data = await this.fetchPage(pageUrl);
 
             if (!data) {
+                this.logSafe('Error', 'Failed to fetch page data. Possible encryption or endpoint change.');
                 return this.emptyResult('Failed to fetch page');
             }
 
+            this.logSafe('API Response JSON', data);
+
             const resp = data as VidrockStreams;
             const sources: Source[] = [];
+            const cleanOrigin = this.BASE_URL.replace(/\/$/, '');
 
             for (const [_, stream] of Object.entries(resp)) {
                 if (!stream?.url) continue;
 
                 let finalUrl: string;
 
+                // Logika khusus Film Asia (Loklok/hls2)
                 if (stream.url.includes('hls2.vdrk.site')) {
+                    this.logSafe('Processing Asian Stream (hls2)', stream.url);
                     const secondData = (await this.fetchPage(stream.url)) as
                         | VidrockCDN[]
                         | null;
@@ -75,12 +93,16 @@ export class VidRockProvider extends BaseProvider {
                             finalUrl = obj.url;
                         }
 
+                        const proxyUrl = this.createProxyUrl(finalUrl, {
+                            ...this.HEADERS,
+                            Referer: 'https://lok-lok.cc/',
+                            Origin: 'https://lok-lok.cc'
+                        });
+                        
+                        this.logSafe('Generated Asian Proxy URL', proxyUrl);
+
                         sources.push({
-                            url: this.createProxyUrl(finalUrl, {
-                                ...this.HEADERS,
-                                Referer: 'https://lok-lok.cc/',
-                                Origin: 'https://lok-lok.cc/'
-                            }),
+                            url: proxyUrl,
                             type: obj.url.includes('.mp4') ? 'mp4' : 'hls',
                             quality: obj.resolution + 'p',
                             audioTracks: [
@@ -98,15 +120,16 @@ export class VidRockProvider extends BaseProvider {
 
                     continue;
                 } else {
-                    finalUrl = this.createProxyUrl(
-                        stream.url,
-                        stream.url.includes('67streams')
-                            ? {
-                                  referrer: this.BASE_URL,
-                                  origin: this.BASE_URL.replace('net/', 'net')
-                              }
-                            : { ...this.HEADERS, Referer: this.BASE_URL }
-                    );
+                    // Logika Film Barat / Umum
+                    const headersToProxy = stream.url.includes('67streams')
+                        ? {
+                              Referer: this.BASE_URL,
+                              Origin: cleanOrigin
+                          }
+                        : { ...this.HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
+
+                    finalUrl = this.createProxyUrl(stream.url, headersToProxy);
+                    this.logSafe('Generated Standard Proxy URL', finalUrl);
                 }
 
                 sources.push({
@@ -134,6 +157,7 @@ export class VidRockProvider extends BaseProvider {
                 diagnostics: []
             };
         } catch (error) {
+            this.logSafe('Critical Error', error instanceof Error ? error.message : 'Unknown provider error');
             return this.emptyResult(
                 error instanceof Error
                     ? error.message
@@ -152,6 +176,8 @@ export class VidRockProvider extends BaseProvider {
             } else {
                 subUrl = `${this.SUB_BASE_URL}/v2/movie/${media.tmdbId}`;
             }
+
+            this.logSafe('Fetching Subtitles', subUrl);
 
             const response = await fetch(subUrl, {
                 headers: {
@@ -191,6 +217,7 @@ export class VidRockProvider extends BaseProvider {
         }
 
         const encrypted = await encryptItemId(itemId);
+        // Mempertahankan struktur endpoint API bawaan
         return `${this.BASE_URL}api/${media.type}/${encrypted}`;
     }
 
@@ -201,7 +228,10 @@ export class VidRockProvider extends BaseProvider {
                 referrer: this.BASE_URL
             });
 
-            if (response.status !== 200) return null;
+            if (response.status !== 200) {
+                this.logSafe('Fetch Page Failed', `Status ${response.status} for ${url}`);
+                return null;
+            }
 
             const contentType = response.headers.get('content-type') ?? '';
 
@@ -210,7 +240,8 @@ export class VidRockProvider extends BaseProvider {
             }
 
             return await response.text();
-        } catch {
+        } catch (error) {
+            this.logSafe('Fetch Page Exception', error);
             return null;
         }
     }

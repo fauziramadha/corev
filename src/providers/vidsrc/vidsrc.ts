@@ -202,8 +202,22 @@ export class VidSrcProvider extends BaseProvider {
     }
 
     private extractM3u8Urls(thirdHtml: string): string[] | null {
+        // Taktik Senter: Memotret isi HTML jika Regex meleset
         const fileField = thirdHtml.match(/file\s*:\s*["']([^"']+)["']/i)?.[1];
-        if (!fileField) return null;
+        
+        if (!fileField) {
+            console.log(`[VidSrc Senter] Regex "file:" gagal! Ini cuplikan isi ruangannya:`);
+            console.log(thirdHtml.substring(0, 800) + '... (truncated)');
+            
+            // Coba cari alternatif: apakah ada link .m3u8 yang ditulis langsung?
+            const directM3u8 = thirdHtml.match(/(https:\/\/[^"']+\.m3u8[^"']*)/i);
+            if (directM3u8) {
+                console.log(`[VidSrc Senter] Kutemukan link m3u8 langsung: ${directM3u8[1]}`);
+                return [directM3u8[1]];
+            }
+            
+            return null;
+        }
 
         const playerDomains = new Map<string, string>();
         playerDomains.set('{v1}', 'neonhorizonworkshops.com');

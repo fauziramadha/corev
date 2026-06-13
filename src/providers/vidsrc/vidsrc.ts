@@ -11,7 +11,7 @@ export class VidSrcProvider extends BaseProvider {
     readonly id = 'vidsrc';
     readonly name = 'VidSrc';
     readonly enabled = true;
-    readonly BASE_URL = 'https://vsembed.ru/';
+    readonly BASE_URL = 'https://vidsrcme.ru/';
     readonly HEADERS = {
         'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',

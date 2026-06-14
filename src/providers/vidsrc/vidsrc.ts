@@ -202,17 +202,30 @@ export class VidSrcProvider extends BaseProvider {
     }
 
     private extractM3u8Urls(thirdHtml: string): string[] | null {
-        // Taktik Senter: Memotret isi HTML jika Regex meleset
         const fileField = thirdHtml.match(/file\s*:\s*["']([^"']+)["']/i)?.[1];
         
         if (!fileField) {
-            console.log(`[VidSrc Senter] Regex "file:" gagal! Ini cuplikan isi ruangannya:`);
-            console.log(thirdHtml.substring(0, 800) + '... (truncated)');
+            console.log(`[VidSrc Senter X-Ray] Regex "file:" gagal! Mencari blok JavaScript yang disembunyikan...`);
             
-            // Coba cari alternatif: apakah ada link .m3u8 yang ditulis langsung?
+            // Taktik X-Ray: Ambil semua blok <script> dari HTML
+            const scripts = thirdHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
+            if (scripts) {
+                scripts.forEach((script, index) => {
+                    // Filter hanya script yang panjang atau mencurigakan
+                    if (script.length > 300 || script.toLowerCase().includes('m3u8') || script.toLowerCase().includes('atob')) {
+                        console.log(`[VidSrc Senter X-Ray] Ditemukan Script Mencurigakan #${index + 1}:`);
+                        // Memotret hingga 2000 karakter agar tidak terpotong lagi
+                        console.log(script.substring(0, 2000));
+                    }
+                });
+            } else {
+                console.log(`[VidSrc Senter X-Ray] Ruangan ini kosong, tidak ada tag <script> sama sekali!`);
+            }
+            
+            // Siapa tahu link m3u8 ditaruh mentah tanpa disembunyikan
             const directM3u8 = thirdHtml.match(/(https:\/\/[^"']+\.m3u8[^"']*)/i);
             if (directM3u8) {
-                console.log(`[VidSrc Senter] Kutemukan link m3u8 langsung: ${directM3u8[1]}`);
+                console.log(`[VidSrc Senter X-Ray] Kutemukan link m3u8 langsung: ${directM3u8[1]}`);
                 return [directM3u8[1]];
             }
             

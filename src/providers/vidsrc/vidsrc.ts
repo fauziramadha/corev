@@ -22,23 +22,14 @@ export class VidSrcProvider extends BaseProvider {
         supportedContentTypes: ['movies', 'tv']
     };
 
-    /**
-     * Fetch movie sources
-     */
     async getMovieSources(media: ProviderMediaObject): Promise<ProviderResult> {
         return this.getSources(media);
     }
 
-    /**
-     * Fetch TV episode sources
-     */
     async getTVSources(media: ProviderMediaObject): Promise<ProviderResult> {
         return this.getSources(media);
     }
 
-    /**
-     * Main scraping logic with CCTV Debugging
-     */
     private async getSources(
         media: ProviderMediaObject
     ): Promise<ProviderResult> {
@@ -70,11 +61,49 @@ export class VidSrcProvider extends BaseProvider {
                 console.log(`[VidSrc Debug] ERROR: Gagal mengekstrak URL ketiga dari dalam Iframe`);
                 return this.emptyResult('Failed to extract stream URL', media);
             }
-            console.log(`[VidSrc Debug] 3. Menuju Server Video: ${thirdUrl.url}`);
+            console.log(`[VidSrc Debug] 3. Menuju Server Video (RCP Gate): ${thirdUrl.url}`);
 
-            const thirdHtml = await this.fetchPage(thirdUrl.url, media);
+            // Taktik Lompatan Gaib (RCP Bypasser)
+            let finalStreamUrl = thirdUrl.url;
+            const rcpTokenMatch = finalStreamUrl.match(/\/prorcp\/([a-zA-Z0-9:=]+)/);
+            
+            if (rcpTokenMatch) {
+                const rawToken = rcpTokenMatch[1];
+                console.log(`[VidSrc Bypasser] Pos Satpam RCP terdeteksi. Mencuri kunci dengan token: ${rawToken.substring(0,20)}...`);
+                
+                try {
+                    const domainMatch = finalStreamUrl.match(/^(https?:\/\/[^\/]+)/);
+                    const baseDomain = domainMatch ? domainMatch[1] : 'https://cloudorchestranova.com';
+                    const verifyUrl = `${baseDomain}/rcp_verify`;
+                    
+                    const verifyRes = await fetch(verifyUrl, {
+                        method: 'POST',
+                        headers: {
+                            ...this.HEADERS,
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'Origin': baseDomain,
+                            'Referer': finalStreamUrl
+                        },
+                        body: `token=${encodeURIComponent(rawToken)}`
+                    });
+                    
+                    const rcpKey = await verifyRes.text();
+                    
+                    if (rcpKey && rcpKey.length === 32) {
+                        console.log(`[VidSrc Bypasser] Sukses! Kunci 32 karakter didapatkan: ${rcpKey}`);
+                        finalStreamUrl = `${finalStreamUrl}?_rcp=${rcpKey}`;
+                        console.log(`[VidSrc Bypasser] Membuka brankas asli: ${finalStreamUrl}`);
+                    } else {
+                        console.log(`[VidSrc Bypasser] Gagal mendapat kunci. Respon: ${rcpKey.substring(0,50)}`);
+                    }
+                } catch (bypassError) {
+                    console.log(`[VidSrc Bypasser] Error saat menembus pos satpam:`, bypassError);
+                }
+            }
+
+            const thirdHtml = await this.fetchPage(finalStreamUrl, media);
             if (!thirdHtml) {
-                console.log(`[VidSrc Debug] ERROR: Server Video menolak akses`);
+                console.log(`[VidSrc Debug] ERROR: Server Video menolak akses ke brankas asli`);
                 return this.emptyResult('Failed to fetch final stream page', media);
             }
 
@@ -122,9 +151,6 @@ export class VidSrcProvider extends BaseProvider {
         }
     }
 
-    /**
-     * Build page URL based on media type
-     */
     private buildPageUrl(media: ProviderMediaObject): string {
         if (media.type === 'movie') {
             return `${this.BASE_URL}/embed/movie?tmdb=${media.tmdbId}`;
@@ -133,9 +159,6 @@ export class VidSrcProvider extends BaseProvider {
         }
     }
 
-    /**
-     * Fetch page HTML
-     */
     private async fetchPage(
         url: string,
         media: ProviderMediaObject
@@ -159,9 +182,6 @@ export class VidSrcProvider extends BaseProvider {
         }
     }
 
-    /**
-     * Extract token, expires, and playlist URL from HTML
-     */
     private extractSecondUrl(html: string): { url: string } | null {
         const src = html.match(
             /<iframe[^>]*\s+src=["']([^"']+)["'][^>]*>/i
@@ -174,10 +194,6 @@ export class VidSrcProvider extends BaseProvider {
         return { url: src };
     }
 
-    /**
-     * Extract third URL from inline JS (loadIframe)
-     * and resolve it against the second URL domain
-     */
     private extractThirdUrl(
         html: string,
         secondUrl: string
@@ -202,19 +218,17 @@ export class VidSrcProvider extends BaseProvider {
     }
 
     private extractM3u8Urls(thirdHtml: string): string[] | null {
+        // Karena kita sudah menembus RCP, kita coba lagi Regex asli yang ringan
         const fileField = thirdHtml.match(/file\s*:\s*["']([^"']+)["']/i)?.[1];
         
         if (!fileField) {
-            console.log(`[VidSrc Senter X-Ray] Regex "file:" gagal! Mencari blok JavaScript yang disembunyikan...`);
+            console.log(`[VidSrc Senter X-Ray] Regex "file:" masih gagal! Mencari blok JavaScript yang disembunyikan...`);
             
-            // Taktik X-Ray: Ambil semua blok <script> dari HTML
             const scripts = thirdHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
             if (scripts) {
                 scripts.forEach((script, index) => {
-                    // Filter hanya script yang panjang atau mencurigakan
                     if (script.length > 300 || script.toLowerCase().includes('m3u8') || script.toLowerCase().includes('atob')) {
                         console.log(`[VidSrc Senter X-Ray] Ditemukan Script Mencurigakan #${index + 1}:`);
-                        // Memotret hingga 2000 karakter agar tidak terpotong lagi
                         console.log(script.substring(0, 2000));
                     }
                 });
@@ -222,7 +236,6 @@ export class VidSrcProvider extends BaseProvider {
                 console.log(`[VidSrc Senter X-Ray] Ruangan ini kosong, tidak ada tag <script> sama sekali!`);
             }
             
-            // Siapa tahu link m3u8 ditaruh mentah tanpa disembunyikan
             const directM3u8 = thirdHtml.match(/(https:\/\/[^"']+\.m3u8[^"']*)/i);
             if (directM3u8) {
                 console.log(`[VidSrc Senter X-Ray] Kutemukan link m3u8 langsung: ${directM3u8[1]}`);
@@ -258,9 +271,6 @@ export class VidSrcProvider extends BaseProvider {
         return filteredM3u8Urls.length > 0 ? filteredM3u8Urls : null;
     }
 
-    /**
-     * Return empty result with diagnostic
-     */
     private emptyResult(
         message: string,
         media: ProviderMediaObject
@@ -271,7 +281,7 @@ export class VidSrcProvider extends BaseProvider {
             diagnostics: [
                 {
                     code: 'PROVIDER_ERROR',
-                    message: `${this.name}: ${message}. Note that VidSrc blocks all kinds of VPN IPs, so if you are using one, try disabling it and see if that helps.`,
+                    message: `${this.name}: ${message}.`,
                     field: '',
                     severity: 'error'
                 }
@@ -279,9 +289,6 @@ export class VidSrcProvider extends BaseProvider {
         };
     }
 
-    /**
-     * Health check
-     */
     async healthCheck(): Promise<boolean> {
         try {
             const response = await fetch(this.BASE_URL, {

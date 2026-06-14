@@ -19,6 +19,10 @@ export class EmbedApiProvider extends BaseProvider {
     readonly name = 'Embed API Backup';
     readonly enabled = true;
 
+    // KEMBALI KE ATURAN OMSS: Pajangan wajib untuk memuaskan TypeScript
+    readonly BASE_URL = 'https://embed.filmu.in'; 
+    readonly HEADERS = {};
+
     readonly capabilities: ProviderCapabilities = {
         supportedContentTypes: ['movies', 'tv']
     };

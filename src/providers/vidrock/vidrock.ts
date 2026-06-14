@@ -15,22 +15,33 @@ export class VidRockProvider extends BaseProvider {
     readonly id = 'vidrock';
     readonly name = 'VidRock';
     readonly enabled = true;
-    readonly BASE_URL = 'https://vidrock.ru/'; // PATCH: Domain baru
+    readonly BASE_URL = 'https://vidrock.ru/';
     readonly SUB_BASE_URL = 'https://sub.vdrk.site';
-    readonly HEADERS = {
+    
+    // PATCH 1: Pakaian Khusus untuk mengambil data JSON (API)
+    readonly API_HEADERS = {
         'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
         Accept: 'application/json, text/javascript, */*; q=0.01',
         'Accept-Language': 'en-US,en;q=0.9',
         Referer: this.BASE_URL,
-        Origin: this.BASE_URL.replace(/\/$/, '') // PATCH: Origin tanpa trailing slash
+        Origin: this.BASE_URL.replace(/\/$/, '')
+    };
+
+    // PATCH 2: Pakaian Khusus Penonton Asli (Video Player)
+    readonly STREAM_HEADERS = {
+        'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
+        Accept: '*/*', // Menyamar sebagai pemutar video sungguhan
+        'Accept-Language': 'en-US,en;q=0.9',
+        Referer: this.BASE_URL,
+        Origin: this.BASE_URL.replace(/\/$/, '')
     };
 
     readonly capabilities: ProviderCapabilities = {
         supportedContentTypes: ['movies', 'tv']
     };
 
-    // Fungsi Logger Aman
     private logSafe(action: string, data: any) {
         try {
             const output = typeof data === 'string' ? data : JSON.stringify(data);
@@ -74,7 +85,6 @@ export class VidRockProvider extends BaseProvider {
                 let finalUrl: string;
                 const providerName = `${this.name} - ${serverName}`;
 
-                // Logika khusus Film Asia lama (hls2)
                 if (stream.url.includes('hls2.vdrk.site')) {
                     this.logSafe('Processing Asian Stream (hls2)', stream.url);
                     const secondData = (await this.fetchPage(stream.url)) as
@@ -94,20 +104,20 @@ export class VidRockProvider extends BaseProvider {
                             finalUrl = obj.url;
                         }
 
-                        // PATCH: Logika Surat Pengantar Dinamis (Dynamic Header Routing)
                         let streamHeaders;
                         
+                        // PATCH 3: Menggunakan STREAM_HEADERS untuk proksi video
                         if (finalUrl.includes('storrrrrrm.site') || finalUrl.includes('hellstorm.lol')) {
-                            this.logSafe('Applying Vidrock Headers to Asian CDN', finalUrl);
+                            this.logSafe('Applying Vidrock Stream Headers to Asian CDN', finalUrl);
                             streamHeaders = {
-                                ...this.HEADERS,
+                                ...this.STREAM_HEADERS,
                                 Referer: this.BASE_URL,
                                 Origin: cleanOrigin
                             };
                         } else {
-                            this.logSafe('Applying LokLok Headers to Asian CDN', finalUrl);
+                            this.logSafe('Applying LokLok Stream Headers to Asian CDN', finalUrl);
                             streamHeaders = {
-                                ...this.HEADERS,
+                                ...this.STREAM_HEADERS,
                                 Referer: 'https://lok-lok.cc/',
                                 Origin: 'https://lok-lok.cc'
                             };
@@ -136,19 +146,19 @@ export class VidRockProvider extends BaseProvider {
 
                     continue;
                 } else {
-                    // Logika Film Barat / Umum & Server Asia Baru
                     let headersToProxy;
 
+                    // PATCH 4: Menggunakan STREAM_HEADERS untuk proksi video
                     if (stream.url.includes('storrrrrrm.site') || stream.url.includes('hellstorm.lol')) {
-                        this.logSafe('Applying Standard Headers to CDN', stream.url);
-                        headersToProxy = { ...this.HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
+                        this.logSafe('Applying Standard Stream Headers to CDN', stream.url);
+                        headersToProxy = { ...this.STREAM_HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
                     } else if (stream.url.includes('67streams')) {
                         headersToProxy = {
                               Referer: this.BASE_URL,
                               Origin: cleanOrigin
                           };
                     } else {
-                        headersToProxy = { ...this.HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
+                        headersToProxy = { ...this.STREAM_HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
                     }
 
                     finalUrl = this.createProxyUrl(stream.url, headersToProxy);
@@ -202,9 +212,10 @@ export class VidRockProvider extends BaseProvider {
 
             this.logSafe('Fetching Subtitles', subUrl);
 
+            // PATCH 5: Subtitle aman memakai API_HEADERS
             const response = await fetch(subUrl, {
                 headers: {
-                    ...this.HEADERS,
+                    ...this.API_HEADERS,
                     Referer: this.BASE_URL
                 }
             });
@@ -220,7 +231,7 @@ export class VidRockProvider extends BaseProvider {
 
             return subsData.map((sub) => ({
                 url: this.createProxyUrl(sub.file, {
-                    ...this.HEADERS,
+                    ...this.STREAM_HEADERS,
                     Referer: subUrl
                 }),
                 format: 'vtt',
@@ -245,8 +256,9 @@ export class VidRockProvider extends BaseProvider {
 
     private async fetchPage(url: string): Promise<any | null> {
         try {
+            // PATCH 6: Selalu gunakan API_HEADERS untuk mengambil data JSON
             const response = await fetch(url, {
-                headers: { ...this.HEADERS, Referer: this.BASE_URL },
+                headers: { ...this.API_HEADERS, Referer: this.BASE_URL },
                 referrer: this.BASE_URL
             });
 
@@ -287,7 +299,7 @@ export class VidRockProvider extends BaseProvider {
         try {
             const response = await fetch(this.BASE_URL, {
                 method: 'HEAD',
-                headers: this.HEADERS
+                headers: this.API_HEADERS
             });
             return response.status === 200;
         } catch {

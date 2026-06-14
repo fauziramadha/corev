@@ -18,7 +18,6 @@ export class VidRockProvider extends BaseProvider {
     readonly BASE_URL = 'https://vidrock.ru/';
     readonly SUB_BASE_URL = 'https://sub.vdrk.site';
     
-    // KEMBALI KE ATURAN OMSS: Variabel wajib 'HEADERS' untuk API Scraper
     readonly HEADERS = {
         'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
@@ -28,11 +27,10 @@ export class VidRockProvider extends BaseProvider {
         Origin: this.BASE_URL.replace(/\/$/, '')
     };
 
-    // Pakaian Khusus Penonton Asli (Video Player) tetap dipertahankan
     readonly STREAM_HEADERS = {
         'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
-        Accept: '*/*', // Menyamar sebagai pemutar video sungguhan
+        Accept: '*/*',
         'Accept-Language': 'en-US,en;q=0.9',
         Referer: this.BASE_URL,
         Origin: this.BASE_URL.replace(/\/$/, '')
@@ -104,30 +102,25 @@ export class VidRockProvider extends BaseProvider {
                             finalUrl = obj.url;
                         }
 
-                        let streamHeaders;
+                        let urlToSend;
                         
+                        // PATCH BYPASS: Kirim link mentah tanpa Vercel Proxy untuk menghindari Geoblock USA
                         if (finalUrl.includes('storrrrrrm.site') || finalUrl.includes('hellstorm.lol')) {
-                            this.logSafe('Applying Vidrock Stream Headers to Asian CDN', finalUrl);
-                            streamHeaders = {
-                                ...this.STREAM_HEADERS,
-                                Referer: this.BASE_URL,
-                                Origin: cleanOrigin
-                            };
+                            this.logSafe('Bypassing Proxy (Geoblock Evasion)', finalUrl);
+                            urlToSend = finalUrl; 
                         } else {
                             this.logSafe('Applying LokLok Stream Headers to Asian CDN', finalUrl);
-                            streamHeaders = {
+                            urlToSend = this.createProxyUrl(finalUrl, {
                                 ...this.STREAM_HEADERS,
                                 Referer: 'https://lok-lok.cc/',
                                 Origin: 'https://lok-lok.cc'
-                            };
+                            });
                         }
-
-                        const proxyUrl = this.createProxyUrl(finalUrl, streamHeaders);
                         
-                        this.logSafe('Generated Asian Proxy URL', proxyUrl);
+                        this.logSafe('Final URL Sent to Player', urlToSend);
 
                         sources.push({
-                            url: proxyUrl,
+                            url: urlToSend,
                             type: obj.url.includes('.mp4') ? 'mp4' : 'hls',
                             quality: obj.resolution + 'p',
                             audioTracks: [
@@ -145,39 +138,43 @@ export class VidRockProvider extends BaseProvider {
 
                     continue;
                 } else {
-                    let headersToProxy;
+                    let urlToSend;
 
+                    // PATCH BYPASS: Kirim link mentah tanpa Vercel Proxy untuk menghindari Geoblock USA
                     if (stream.url.includes('storrrrrrm.site') || stream.url.includes('hellstorm.lol')) {
-                        this.logSafe('Applying Standard Stream Headers to CDN', stream.url);
-                        headersToProxy = { ...this.STREAM_HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
+                        this.logSafe('Bypassing Proxy (Geoblock Evasion)', stream.url);
+                        urlToSend = stream.url;
                     } else if (stream.url.includes('67streams')) {
-                        headersToProxy = {
+                        urlToSend = this.createProxyUrl(stream.url, {
                               Referer: this.BASE_URL,
                               Origin: cleanOrigin
-                          };
+                          });
                     } else {
-                        headersToProxy = { ...this.STREAM_HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
+                        urlToSend = this.createProxyUrl(stream.url, { 
+                            ...this.STREAM_HEADERS, 
+                            Referer: this.BASE_URL, 
+                            Origin: cleanOrigin 
+                        });
                     }
 
-                    finalUrl = this.createProxyUrl(stream.url, headersToProxy);
-                    this.logSafe('Generated Proxy URL', finalUrl);
-                }
+                    this.logSafe('Final URL Sent to Player', urlToSend);
 
-                sources.push({
-                    url: finalUrl,
-                    quality: '1080',
-                    type: stream.url.includes('.mp4') ? 'mp4' : 'hls',
-                    audioTracks: [
-                        {
-                            language:
-                                stream.language === 'English'
-                                    ? 'eng'
-                                    : 'unknown',
-                            label: stream.language ?? 'Unknown'
-                        }
-                    ],
-                    provider: { id: this.id, name: providerName }
-                });
+                    sources.push({
+                        url: urlToSend,
+                        quality: '1080',
+                        type: stream.url.includes('.mp4') ? 'mp4' : 'hls',
+                        audioTracks: [
+                            {
+                                language:
+                                    stream.language === 'English'
+                                        ? 'eng'
+                                        : 'unknown',
+                                label: stream.language ?? 'Unknown'
+                            }
+                        ],
+                        provider: { id: this.id, name: providerName }
+                    });
+                }
             }
 
             const subtitles = await this.fetchSubtitles(media);
@@ -210,7 +207,6 @@ export class VidRockProvider extends BaseProvider {
 
             this.logSafe('Fetching Subtitles', subUrl);
 
-            // Subtitle kembali menggunakan HEADERS bawaan
             const response = await fetch(subUrl, {
                 headers: {
                     ...this.HEADERS,
@@ -254,7 +250,6 @@ export class VidRockProvider extends BaseProvider {
 
     private async fetchPage(url: string): Promise<any | null> {
         try {
-            // Mengambil JSON kembali menggunakan HEADERS bawaan
             const response = await fetch(url, {
                 headers: { ...this.HEADERS, Referer: this.BASE_URL },
                 referrer: this.BASE_URL

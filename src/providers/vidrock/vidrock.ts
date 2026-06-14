@@ -18,8 +18,8 @@ export class VidRockProvider extends BaseProvider {
     readonly BASE_URL = 'https://vidrock.ru/';
     readonly SUB_BASE_URL = 'https://sub.vdrk.site';
     
-    // PATCH 1: Pakaian Khusus untuk mengambil data JSON (API)
-    readonly API_HEADERS = {
+    // KEMBALI KE ATURAN OMSS: Variabel wajib 'HEADERS' untuk API Scraper
+    readonly HEADERS = {
         'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
         Accept: 'application/json, text/javascript, */*; q=0.01',
@@ -28,7 +28,7 @@ export class VidRockProvider extends BaseProvider {
         Origin: this.BASE_URL.replace(/\/$/, '')
     };
 
-    // PATCH 2: Pakaian Khusus Penonton Asli (Video Player)
+    // Pakaian Khusus Penonton Asli (Video Player) tetap dipertahankan
     readonly STREAM_HEADERS = {
         'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
@@ -106,7 +106,6 @@ export class VidRockProvider extends BaseProvider {
 
                         let streamHeaders;
                         
-                        // PATCH 3: Menggunakan STREAM_HEADERS untuk proksi video
                         if (finalUrl.includes('storrrrrrm.site') || finalUrl.includes('hellstorm.lol')) {
                             this.logSafe('Applying Vidrock Stream Headers to Asian CDN', finalUrl);
                             streamHeaders = {
@@ -148,7 +147,6 @@ export class VidRockProvider extends BaseProvider {
                 } else {
                     let headersToProxy;
 
-                    // PATCH 4: Menggunakan STREAM_HEADERS untuk proksi video
                     if (stream.url.includes('storrrrrrm.site') || stream.url.includes('hellstorm.lol')) {
                         this.logSafe('Applying Standard Stream Headers to CDN', stream.url);
                         headersToProxy = { ...this.STREAM_HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
@@ -212,10 +210,10 @@ export class VidRockProvider extends BaseProvider {
 
             this.logSafe('Fetching Subtitles', subUrl);
 
-            // PATCH 5: Subtitle aman memakai API_HEADERS
+            // Subtitle kembali menggunakan HEADERS bawaan
             const response = await fetch(subUrl, {
                 headers: {
-                    ...this.API_HEADERS,
+                    ...this.HEADERS,
                     Referer: this.BASE_URL
                 }
             });
@@ -256,9 +254,9 @@ export class VidRockProvider extends BaseProvider {
 
     private async fetchPage(url: string): Promise<any | null> {
         try {
-            // PATCH 6: Selalu gunakan API_HEADERS untuk mengambil data JSON
+            // Mengambil JSON kembali menggunakan HEADERS bawaan
             const response = await fetch(url, {
-                headers: { ...this.API_HEADERS, Referer: this.BASE_URL },
+                headers: { ...this.HEADERS, Referer: this.BASE_URL },
                 referrer: this.BASE_URL
             });
 
@@ -299,7 +297,7 @@ export class VidRockProvider extends BaseProvider {
         try {
             const response = await fetch(this.BASE_URL, {
                 method: 'HEAD',
-                headers: this.API_HEADERS
+                headers: this.HEADERS
             });
             return response.status === 200;
         } catch {

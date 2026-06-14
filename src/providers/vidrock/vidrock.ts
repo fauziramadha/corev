@@ -68,12 +68,10 @@ export class VidRockProvider extends BaseProvider {
             const sources: Source[] = [];
             const cleanOrigin = this.BASE_URL.replace(/\/$/, '');
 
-            // PATCH: Menangkap nama server (Nova, Atlas, dll) dari response
             for (const [serverName, stream] of Object.entries(resp)) {
                 if (!stream?.url) continue;
 
                 let finalUrl: string;
-                // PATCH: Merakit nama provider agar tidak tertumpuk di lobi
                 const providerName = `${this.name} - ${serverName}`;
 
                 // Logika khusus Film Asia lama (hls2)
@@ -96,11 +94,26 @@ export class VidRockProvider extends BaseProvider {
                             finalUrl = obj.url;
                         }
 
-                        const proxyUrl = this.createProxyUrl(finalUrl, {
-                            ...this.HEADERS,
-                            Referer: 'https://lok-lok.cc/',
-                            Origin: 'https://lok-lok.cc'
-                        });
+                        // PATCH: Logika Surat Pengantar Dinamis (Dynamic Header Routing)
+                        let streamHeaders;
+                        
+                        if (finalUrl.includes('storrrrrrm.site') || finalUrl.includes('hellstorm.lol')) {
+                            this.logSafe('Applying Vidrock Headers to Asian CDN', finalUrl);
+                            streamHeaders = {
+                                ...this.HEADERS,
+                                Referer: this.BASE_URL,
+                                Origin: cleanOrigin
+                            };
+                        } else {
+                            this.logSafe('Applying LokLok Headers to Asian CDN', finalUrl);
+                            streamHeaders = {
+                                ...this.HEADERS,
+                                Referer: 'https://lok-lok.cc/',
+                                Origin: 'https://lok-lok.cc'
+                            };
+                        }
+
+                        const proxyUrl = this.createProxyUrl(finalUrl, streamHeaders);
                         
                         this.logSafe('Generated Asian Proxy URL', proxyUrl);
 
@@ -117,19 +130,17 @@ export class VidRockProvider extends BaseProvider {
                                     label: stream.language ?? 'Unknown'
                                 }
                             ],
-                            provider: { id: this.id, name: providerName } // Menggunakan nama spesifik
+                            provider: { id: this.id, name: providerName }
                         });
                     });
 
                     continue;
                 } else {
-                    // PATCH: Logika Film Barat / Umum & Server Asia Baru
+                    // Logika Film Barat / Umum & Server Asia Baru
                     let headersToProxy;
 
-                    // Deteksi server Asia baru dari log (storrrrrrm.site & hellstorm.lol)
                     if (stream.url.includes('storrrrrrm.site') || stream.url.includes('hellstorm.lol')) {
-                        // KITA CABUT HEADER LOKLOK KARENA INI CDN PRIBADI VIDROCK
-                        this.logSafe('Applying Standard Headers to new CDN', stream.url);
+                        this.logSafe('Applying Standard Headers to CDN', stream.url);
                         headersToProxy = { ...this.HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
                     } else if (stream.url.includes('67streams')) {
                         headersToProxy = {
@@ -157,7 +168,7 @@ export class VidRockProvider extends BaseProvider {
                             label: stream.language ?? 'Unknown'
                         }
                     ],
-                    provider: { id: this.id, name: providerName } // Menggunakan nama spesifik
+                    provider: { id: this.id, name: providerName }
                 });
             }
 
@@ -229,7 +240,6 @@ export class VidRockProvider extends BaseProvider {
         }
 
         const encrypted = await encryptItemId(itemId);
-        // Mempertahankan struktur endpoint API bawaan
         return `${this.BASE_URL}api/${media.type}/${encrypted}`;
     }
 

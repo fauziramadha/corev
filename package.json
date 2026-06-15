@@ -4,8 +4,8 @@
     "type": "module",
     "scripts": {
         "dev": "tsx watch src/server.ts",
-        "build": "tsc",
-        "start": "npm run build && node dist/server.js",
+        "build": "",
+        "start": "node dist/server.js",
         "format": "prettier --write src",
         "clean": "npx rimraf dist"
     },

@@ -14,7 +14,8 @@ async function main() {
         version: '1.0.0',
 
         // Network
-        host: process.env.HOST ?? 'localhost',
+        // PERUBAHAN: localhost diganti ke 0.0.0.0 agar akses Choreo terbuka
+        host: process.env.HOST ?? '0.0.0.0',
         port: Number(process.env.PORT ?? 3000),
         publicUrl: process.env.PUBLIC_URL,
 
@@ -83,7 +84,7 @@ async function main() {
 
     const publicUrl =
         process.env.PUBLIC_URL ??
-        `http://${process.env.HOST ?? 'localhost'}:${process.env.PORT ?? 3000}`;
+        `http://${process.env.HOST ?? '0.0.0.0'}:${process.env.PORT ?? 3000}`;
 
     const uiUrl = `https://ui.cinepro.cc/?omssurl=${encodeURIComponent(publicUrl)}`;
 
@@ -114,6 +115,8 @@ ${borderBottom}
 `);
 }
 
-main().catch(() => {
+// PERUBAHAN: Menambahkan console.error agar jika gagal, Choreo bisa mencatat alasannya
+main().catch((err) => {
+    console.error("FATAL ERROR: Mesin gagal menyala!", err);
     process.exit(1);
 });

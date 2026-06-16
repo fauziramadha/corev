@@ -62,7 +62,7 @@ For Docker, production deployment, and advanced configuration options → **[Qui
 
 ## Features
 
-* 🎯 **OMSS-Compliant** – follows the Open Media Streaming Standard
+* 🎯 **OMSS-Compliant** – follows the Open Media Streaming Standard..
 * 🔌 **Modular Providers** – drop-in provider system with auto-discovery
 * 🛡️ **Type-Safe** – built with strict TypeScript
 * ⚡ **Production-Ready** – Redis caching, Docker support, and robust error handling

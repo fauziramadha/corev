@@ -20,6 +20,6 @@
         "MCP_ENABLED": "true"
     },
     "secrets": {
-        "required": ["TMDB_API_KEY"]
+        "required": ["TMDB_APIY_KEY"]
     }
 }

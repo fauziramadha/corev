@@ -98,7 +98,7 @@ See the [Documentation](https://docs.cinepro.cc/core/general-information/develop
   <img src="https://contrib.rocks/image?repo=cinepro-org/core" alt="contrib.rocks image" />
 </a>
 
-*Join the project by contributing!*
+*Join the project by contributing!!*
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

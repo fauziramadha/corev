@@ -18,7 +18,7 @@ export class VidRockProvider extends BaseProvider {
     readonly BASE_URL = 'https://vidrock.ru/';
     readonly SUB_BASE_URL = 'https://sub.vdrk.site';
     
-    // Header standar untuk mengambil data halaman (Mimetik Android)
+    // Header standar untuk mengambil data halaman
     readonly HEADERS = {
         'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
@@ -33,7 +33,7 @@ export class VidRockProvider extends BaseProvider {
         'Sec-Fetch-Site': 'same-origin'
     };
 
-    // Header mutlak (Bunglon) khusus untuk menipu Cloudflare saat mengunduh pecahan video .ts
+    // Header mutlak (Bunglon) khusus untuk menipu Cloudflare
     readonly PROXY_STREAM_HEADERS = {
         'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36',
         'Accept': '*/*',
@@ -45,8 +45,8 @@ export class VidRockProvider extends BaseProvider {
         'Sec-Ch-Ua-Mobile': '?1',
         'Sec-Ch-Ua-Platform': '"Android"',
         'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'no-cors', // Mode krusial agar tidak dicekik
-        'Sec-Fetch-Site': 'same-site' // Mengaku sebagai orang dalam
+        'Sec-Fetch-Mode': 'no-cors', 
+        'Sec-Fetch-Site': 'same-site' 
     };
 
     readonly capabilities: ProviderCapabilities = {
@@ -99,7 +99,6 @@ export class VidRockProvider extends BaseProvider {
                         }
 
                         sources.push({
-                            // Menyuntikkan tameng pelindung ke dalam proksi
                             url: this.createProxyUrl(finalUrl, {
                                 ...this.PROXY_STREAM_HEADERS
                             }),
@@ -132,6 +131,7 @@ export class VidRockProvider extends BaseProvider {
                     );
                 }
 
+                // Properti headers dihapus agar patuh pada aturan TypeScript OMSS
                 sources.push({
                     url: finalUrl,
                     quality: '1080',
@@ -145,9 +145,7 @@ export class VidRockProvider extends BaseProvider {
                             label: stream.language ?? 'Unknown'
                         }
                     ],
-                    provider: { id: this.id, name: this.name },
-                    // Mengirimkan header secara utuh ke frontend agar OMSS bisa mengeksekusinya
-                    headers: this.PROXY_STREAM_HEADERS 
+                    provider: { id: this.id, name: this.name }
                 });
             }
 

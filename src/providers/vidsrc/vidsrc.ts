@@ -12,8 +12,8 @@ export class HanerixProvider extends BaseProvider {
     readonly name = 'KlikXXI (Hanerix)';
     readonly enabled = true;
     
-    // Domain yang terlibat
-    readonly KLIKXXI_URL = 'https://klikxxi.me/';
+    // WAJIB: Kerangka OMSS mengharuskan variabel ini bernama BASE_URL
+    readonly BASE_URL = 'https://klikxxi.me/';
     readonly HANERIX_URL = 'https://hanerix.com/';
     
     // Tiket sesi Yandex Metrika hasil tangkapan Inspect Element
@@ -31,8 +31,16 @@ export class HanerixProvider extends BaseProvider {
         'Sec-Ch-Ua-Platform': '"Android"'
     };
 
+    // Header mutlak yang akan dibungkus oleh proksi internal OMSS
+    readonly PROXY_STREAM_HEADERS = {
+        ...this.HEADERS,
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'no-cors',
+        'Sec-Fetch-Site': 'same-site'
+    };
+
     readonly capabilities: ProviderCapabilities = {
-        supportedContentTypes: ['movies', 'tv'] // Sesuaikan jika TV series punya format URL beda
+        supportedContentTypes: ['movies', 'tv']
     };
 
     async getMovieSources(media: ProviderMediaObject): Promise<ProviderResult> {
@@ -47,45 +55,63 @@ export class HanerixProvider extends BaseProvider {
         media: ProviderMediaObject
     ): Promise<ProviderResult> {
         try {
-            // LANGKAH 1: Merakit URL Halaman KlikXXI (Contoh: backrooms-2026)
-            // Mengubah judul menjadi huruf kecil dan membuang karakter aneh
-            const cleanTitle = media.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-            const year = media.year ? `-${media.year}` : '';
-            const slug = `${cleanTitle}${year}`.replace(/-+$/, ''); // Menghapus strip lebih di akhir
-            const pageUrl = `${this.KLIKXXI_URL}${slug}/`;
+            // LANGKAH 1: TAKTIK B - Melakukan Pencarian di Situs KlikXXI
+            const searchQuery = encodeURIComponent(media.title);
+            const searchUrl = `${this.BASE_URL}?s=${searchQuery}`;
 
-            // Mengunjungi halaman utama KlikXXI
-            const pageHtml = await this.fetchHtml(pageUrl, {
+            const searchHtml = await this.fetchHtml(searchUrl, {
                 ...this.HEADERS,
                 'Referer': 'https://google.com/'
             });
 
-            if (!pageHtml) {
-                return this.emptyResult('Gagal memuat halaman utama KlikXXI');
+            if (!searchHtml) {
+                return this.emptyResult('Gagal memuat halaman pencarian KlikXXI');
             }
 
-            // LANGKAH 2: Mencuri tautan iframe Hanerix dari dalam HTML
+            // LANGKAH 2: Mengekstrak URL film dari hasil pencarian
+            // Kita ubah judul menjadi huruf kecil-bergaris agar akurat saat mencocokkan tautan
+            const cleanTitle = media.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            
+            // Mencari pola tautan: <a href="https://klikxxi.me/apapun-judul-film-apapun/">
+            const linkRegex = new RegExp(`href=["'](${this.BASE_URL}[^"']*?${cleanTitle}[^"']*?\\/)["']`, 'i');
+            const linkMatch = searchHtml.match(linkRegex);
+
+            if (!linkMatch || !linkMatch[1]) {
+                return this.emptyResult('Film tidak ditemukan di hasil pencarian KlikXXI');
+            }
+
+            const pageUrl = linkMatch[1]; // Hasil: https://klikxxi.me/backrooms-2026/
+
+            // LANGKAH 3: Mengunjungi halaman film untuk memancing iframe Hanerix
+            const pageHtml = await this.fetchHtml(pageUrl, {
+                ...this.HEADERS,
+                'Referer': searchUrl
+            });
+
+            if (!pageHtml) {
+                return this.emptyResult('Gagal memuat halaman film KlikXXI');
+            }
+
             // Mencari pola: <iframe ... src="https://hanerix.com/e/9xb50ftb077c"
             const iframeMatch = pageHtml.match(/<iframe[^>]+src=["'](https:\/\/hanerix\.com\/e\/[^"']+)["']/i);
             
             if (!iframeMatch || !iframeMatch[1]) {
-                return this.emptyResult('Tidak menemukan iframe Hanerix di halaman tersebut');
+                return this.emptyResult('Tidak menemukan iframe Hanerix di halaman film tersebut');
             }
 
-            const iframeUrl = iframeMatch[1]; // Hasil: https://hanerix.com/e/9xb50ftb077c
+            const iframeUrl = iframeMatch[1];
 
-            // LANGKAH 3: Mengunjungi halaman iframe untuk mencari master.m3u8
+            // LANGKAH 4: Mengunjungi halaman iframe untuk mencari master.m3u8
             const iframeHtml = await this.fetchHtml(iframeUrl, {
                 ...this.HEADERS,
-                'Referer': pageUrl // Mengaku datang dari halaman KlikXXI
+                'Referer': pageUrl 
             });
 
             if (!iframeHtml) {
                 return this.emptyResult('Gagal memuat iframe Hanerix');
             }
 
-            // LANGKAH 4: Menarik tautan .m3u8 murni dari skrip pemutar video
-            // Mencari pola URL stream yang berakhiran .m3u8
+            // LANGKAH 5: Menarik tautan .m3u8 murni dari skrip
             const m3u8Match = iframeHtml.match(/(https:\/\/hanerix\.com\/stream\/[^"']+\.m3u8)/i);
 
             if (!m3u8Match || !m3u8Match[1]) {
@@ -94,21 +120,18 @@ export class HanerixProvider extends BaseProvider {
 
             const rawUrl = m3u8Match[1];
 
-            // LANGKAH 5: Membungkus URL dengan proksi internal OMSS beserta tiketnya
+            // LANGKAH 6: Membungkus URL dengan proksi internal OMSS beserta tiket Yandex
             const proxiedUrl = this.createProxyUrl(rawUrl, {
-                ...this.HEADERS,
+                ...this.PROXY_STREAM_HEADERS,
                 'Referer': iframeUrl,
-                'Origin': this.HANERIX_URL.replace(/\/$/, ''), // Menghapus garis miring di akhir
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'no-cors',
-                'Sec-Fetch-Site': 'same-site'
+                'Origin': this.HANERIX_URL.replace(/\/$/, '')
             });
 
             const sources: Source[] = [
                 {
                     url: proxiedUrl,
                     type: 'hls',
-                    quality: '1080p', // Bisa disesuaikan jika Hanerix memberikan resolusi spesifik
+                    quality: '1080p', 
                     audioTracks: [
                         {
                             language: 'unknown',
@@ -121,7 +144,7 @@ export class HanerixProvider extends BaseProvider {
 
             return {
                 sources,
-                subtitles: [], // Kosongkan atau sesuaikan jika ada fungsi scraping subtitel
+                subtitles: [], 
                 diagnostics: []
             };
         } catch (error) {
@@ -159,7 +182,7 @@ export class HanerixProvider extends BaseProvider {
 
     async healthCheck(): Promise<boolean> {
         try {
-            const response = await fetch(this.KLIKXXI_URL, {
+            const response = await fetch(this.BASE_URL, {
                 method: 'HEAD',
                 headers: this.HEADERS
             });

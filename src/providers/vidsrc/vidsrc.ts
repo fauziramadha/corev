@@ -8,18 +8,18 @@ import type {
 } from '@omss/framework';
 
 export class HanerixProvider extends BaseProvider {
-    readonly id = 'klikxxi';
-    readonly name = 'KlikXXI (Hanerix)';
+    readonly id = 'hanerix';
+    readonly name = 'Hanerix (KlikXXI)';
     readonly enabled = true;
     
     // Domain yang terlibat
     readonly KLIKXXI_URL = 'https://klikxxi.me/';
-    readonly HANERIX_URL = 'https://hanerix.com/';
+    readonly BASE_URL = 'https://hanerix.com/';
     
     // Tiket sesi Yandex Metrika hasil tangkapan Inspect Element
     private readonly SESSION_COOKIES = '_ym_uid=1781814223377007935; _ym_d=1781814223; _ym_isad=2; _ym_visorc=b';
 
-    // Header penyamaran tingkat dasar
+    // Header untuk koneksi dasar
     readonly HEADERS = {
         'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36',
         'Accept': '*/*',
@@ -31,8 +31,15 @@ export class HanerixProvider extends BaseProvider {
         'Sec-Ch-Ua-Platform': '"Android"'
     };
 
+    // Header mutlak yang akan dibungkus oleh proksi internal OMSS
+    readonly PROXY_STREAM_HEADERS = {
+        ...this.HEADERS,
+        'Sec-Fetch-Mode': 'no-cors',
+        'Sec-Fetch-Site': 'same-site'
+    };
+
     readonly capabilities: ProviderCapabilities = {
-        supportedContentTypes: ['movies', 'tv'] // Sesuaikan jika TV series punya format URL beda
+        supportedContentTypes: ['movies', 'tv']
     };
 
     async getMovieSources(media: ProviderMediaObject): Promise<ProviderResult> {
@@ -47,14 +54,13 @@ export class HanerixProvider extends BaseProvider {
         media: ProviderMediaObject
     ): Promise<ProviderResult> {
         try {
-            // LANGKAH 1: Merakit URL Halaman KlikXXI (Contoh: backrooms-2026)
-            // Mengubah judul menjadi huruf kecil dan membuang karakter aneh
+            // 1. Merakit Slug URL KlikXXI (Contoh: backrooms-2026)
             const cleanTitle = media.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
             const year = media.year ? `-${media.year}` : '';
-            const slug = `${cleanTitle}${year}`.replace(/-+$/, ''); // Menghapus strip lebih di akhir
+            const slug = `${cleanTitle}${year}`.replace(/-+$/, '');
             const pageUrl = `${this.KLIKXXI_URL}${slug}/`;
 
-            // Mengunjungi halaman utama KlikXXI
+            // 2. Mengunjungi halaman utama KlikXXI untuk mencari iframe
             const pageHtml = await this.fetchHtml(pageUrl, {
                 ...this.HEADERS,
                 'Referer': 'https://google.com/'
@@ -64,28 +70,26 @@ export class HanerixProvider extends BaseProvider {
                 return this.emptyResult('Gagal memuat halaman utama KlikXXI');
             }
 
-            // LANGKAH 2: Mencuri tautan iframe Hanerix dari dalam HTML
-            // Mencari pola: <iframe ... src="https://hanerix.com/e/9xb50ftb077c"
+            // 3. Menarik tautan iframe Hanerix dari dalam HTML
             const iframeMatch = pageHtml.match(/<iframe[^>]+src=["'](https:\/\/hanerix\.com\/e\/[^"']+)["']/i);
             
             if (!iframeMatch || !iframeMatch[1]) {
                 return this.emptyResult('Tidak menemukan iframe Hanerix di halaman tersebut');
             }
 
-            const iframeUrl = iframeMatch[1]; // Hasil: https://hanerix.com/e/9xb50ftb077c
+            const iframeUrl = iframeMatch[1];
 
-            // LANGKAH 3: Mengunjungi halaman iframe untuk mencari master.m3u8
+            // 4. Mengunjungi halaman iframe untuk mencari master.m3u8
             const iframeHtml = await this.fetchHtml(iframeUrl, {
                 ...this.HEADERS,
-                'Referer': pageUrl // Mengaku datang dari halaman KlikXXI
+                'Referer': pageUrl
             });
 
             if (!iframeHtml) {
                 return this.emptyResult('Gagal memuat iframe Hanerix');
             }
 
-            // LANGKAH 4: Menarik tautan .m3u8 murni dari skrip pemutar video
-            // Mencari pola URL stream yang berakhiran .m3u8
+            // 5. Menarik tautan .m3u8 murni dari skrip
             const m3u8Match = iframeHtml.match(/(https:\/\/hanerix\.com\/stream\/[^"']+\.m3u8)/i);
 
             if (!m3u8Match || !m3u8Match[1]) {
@@ -94,21 +98,18 @@ export class HanerixProvider extends BaseProvider {
 
             const rawUrl = m3u8Match[1];
 
-            // LANGKAH 5: Membungkus URL dengan proksi internal OMSS beserta tiketnya
+            // 6. Membungkus URL dengan proksi internal OMSS beserta tiket Yandex
             const proxiedUrl = this.createProxyUrl(rawUrl, {
-                ...this.HEADERS,
+                ...this.PROXY_STREAM_HEADERS,
                 'Referer': iframeUrl,
-                'Origin': this.HANERIX_URL.replace(/\/$/, ''), // Menghapus garis miring di akhir
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'no-cors',
-                'Sec-Fetch-Site': 'same-site'
+                'Origin': 'https://hanerix.com'
             });
 
             const sources: Source[] = [
                 {
                     url: proxiedUrl,
                     type: 'hls',
-                    quality: '1080p', // Bisa disesuaikan jika Hanerix memberikan resolusi spesifik
+                    quality: '1080p',
                     audioTracks: [
                         {
                             language: 'unknown',
@@ -121,7 +122,7 @@ export class HanerixProvider extends BaseProvider {
 
             return {
                 sources,
-                subtitles: [], // Kosongkan atau sesuaikan jika ada fungsi scraping subtitel
+                subtitles: [],
                 diagnostics: []
             };
         } catch (error) {
@@ -131,7 +132,7 @@ export class HanerixProvider extends BaseProvider {
         }
     }
 
-    // Fungsi khusus untuk mengambil HTML mentah (scraping)
+    // Mengganti fungsi fetchPage(JSON) menjadi fetchHtml(Teks murni)
     private async fetchHtml(url: string, headers: Record<string, string>): Promise<string | null> {
         try {
             const response = await fetch(url, { headers });

@@ -15,41 +15,20 @@ export class VidRockProvider extends BaseProvider {
     readonly id = 'vidrock';
     readonly name = 'VidRock';
     readonly enabled = true;
-    readonly BASE_URL = 'https://vidrock.ru/';
+    readonly BASE_URL = 'https://vidrock.net/';
     readonly SUB_BASE_URL = 'https://sub.vdrk.site';
-    
-    // KEMBALI KE ATURAN OMSS: Variabel wajib 'HEADERS' untuk API Scraper
     readonly HEADERS = {
         'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
         Accept: 'application/json, text/javascript, */*; q=0.01',
         'Accept-Language': 'en-US,en;q=0.9',
         Referer: this.BASE_URL,
-        Origin: this.BASE_URL.replace(/\/$/, '')
-    };
-
-    // Pakaian Khusus Penonton Asli (Video Player) tetap dipertahankan
-    readonly STREAM_HEADERS = {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
-        Accept: '*/*', // Menyamar sebagai pemutar video sungguhan
-        'Accept-Language': 'en-US,en;q=0.9',
-        Referer: this.BASE_URL,
-        Origin: this.BASE_URL.replace(/\/$/, '')
+        Origin: this.BASE_URL
     };
 
     readonly capabilities: ProviderCapabilities = {
         supportedContentTypes: ['movies', 'tv']
     };
-
-    private logSafe(action: string, data: any) {
-        try {
-            const output = typeof data === 'string' ? data : JSON.stringify(data);
-            console.log(`[VidRock Debug] ${action}:`, output.length > 500 ? output.substring(0, 500) + '... (truncated)' : output);
-        } catch (e) {
-            console.log(`[VidRock Debug] ${action}: (Unloggable data)`);
-        }
-    }
 
     async getMovieSources(media: ProviderMediaObject): Promise<ProviderResult> {
         return this.getSources(media);
@@ -64,29 +43,21 @@ export class VidRockProvider extends BaseProvider {
     ): Promise<ProviderResult> {
         try {
             const pageUrl = await this.buildUrl(media);
-            this.logSafe('Fetching API URL', pageUrl);
-
             const data = await this.fetchPage(pageUrl);
 
             if (!data) {
-                this.logSafe('Error', 'Failed to fetch page data. Possible encryption or endpoint change.');
                 return this.emptyResult('Failed to fetch page');
             }
 
-            this.logSafe('API Response JSON', data);
-
             const resp = data as VidrockStreams;
             const sources: Source[] = [];
-            const cleanOrigin = this.BASE_URL.replace(/\/$/, '');
 
-            for (const [serverName, stream] of Object.entries(resp)) {
+            for (const [_, stream] of Object.entries(resp)) {
                 if (!stream?.url) continue;
 
                 let finalUrl: string;
-                const providerName = `${this.name} - ${serverName}`;
 
                 if (stream.url.includes('hls2.vdrk.site')) {
-                    this.logSafe('Processing Asian Stream (hls2)', stream.url);
                     const secondData = (await this.fetchPage(stream.url)) as
                         | VidrockCDN[]
                         | null;
@@ -104,30 +75,12 @@ export class VidRockProvider extends BaseProvider {
                             finalUrl = obj.url;
                         }
 
-                        let streamHeaders;
-                        
-                        if (finalUrl.includes('storrrrrrm.site') || finalUrl.includes('hellstorm.lol')) {
-                            this.logSafe('Applying Vidrock Stream Headers to Asian CDN', finalUrl);
-                            streamHeaders = {
-                                ...this.STREAM_HEADERS,
-                                Referer: this.BASE_URL,
-                                Origin: cleanOrigin
-                            };
-                        } else {
-                            this.logSafe('Applying LokLok Stream Headers to Asian CDN', finalUrl);
-                            streamHeaders = {
-                                ...this.STREAM_HEADERS,
-                                Referer: 'https://lok-lok.cc/',
-                                Origin: 'https://lok-lok.cc'
-                            };
-                        }
-
-                        const proxyUrl = this.createProxyUrl(finalUrl, streamHeaders);
-                        
-                        this.logSafe('Generated Asian Proxy URL', proxyUrl);
-
                         sources.push({
-                            url: proxyUrl,
+                            url: this.createProxyUrl(finalUrl, {
+                                ...this.HEADERS,
+                                Referer: 'https://lok-lok.cc/',
+                                Origin: 'https://lok-lok.cc/'
+                            }),
                             type: obj.url.includes('.mp4') ? 'mp4' : 'hls',
                             quality: obj.resolution + 'p',
                             audioTracks: [
@@ -139,34 +92,27 @@ export class VidRockProvider extends BaseProvider {
                                     label: stream.language ?? 'Unknown'
                                 }
                             ],
-                            provider: { id: this.id, name: providerName }
+                            provider: { id: this.id, name: this.name }
                         });
                     });
 
                     continue;
                 } else {
-                    let headersToProxy;
-
-                    if (stream.url.includes('storrrrrrm.site') || stream.url.includes('hellstorm.lol')) {
-                        this.logSafe('Applying Standard Stream Headers to CDN', stream.url);
-                        headersToProxy = { ...this.STREAM_HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
-                    } else if (stream.url.includes('67streams')) {
-                        headersToProxy = {
-                              Referer: this.BASE_URL,
-                              Origin: cleanOrigin
-                          };
-                    } else {
-                        headersToProxy = { ...this.STREAM_HEADERS, Referer: this.BASE_URL, Origin: cleanOrigin };
-                    }
-
-                    finalUrl = this.createProxyUrl(stream.url, headersToProxy);
-                    this.logSafe('Generated Proxy URL', finalUrl);
+                    finalUrl = this.createProxyUrl(
+                        stream.url,
+                        stream.url.includes('67streams')
+                            ? {
+                                  referrer: this.BASE_URL,
+                                  origin: this.BASE_URL.replace('net/', 'net')
+                              }
+                            : { ...this.HEADERS, Referer: this.BASE_URL }
+                    );
                 }
 
                 sources.push({
                     url: finalUrl,
                     quality: '1080',
-                    type: stream.url.includes('.mp4') ? 'mp4' : 'hls',
+                    type: 'hls',
                     audioTracks: [
                         {
                             language:
@@ -176,7 +122,7 @@ export class VidRockProvider extends BaseProvider {
                             label: stream.language ?? 'Unknown'
                         }
                     ],
-                    provider: { id: this.id, name: providerName }
+                    provider: { id: this.id, name: this.name }
                 });
             }
 
@@ -188,7 +134,6 @@ export class VidRockProvider extends BaseProvider {
                 diagnostics: []
             };
         } catch (error) {
-            this.logSafe('Critical Error', error instanceof Error ? error.message : 'Unknown provider error');
             return this.emptyResult(
                 error instanceof Error
                     ? error.message
@@ -208,9 +153,6 @@ export class VidRockProvider extends BaseProvider {
                 subUrl = `${this.SUB_BASE_URL}/v2/movie/${media.tmdbId}`;
             }
 
-            this.logSafe('Fetching Subtitles', subUrl);
-
-            // Subtitle kembali menggunakan HEADERS bawaan
             const response = await fetch(subUrl, {
                 headers: {
                     ...this.HEADERS,
@@ -229,7 +171,7 @@ export class VidRockProvider extends BaseProvider {
 
             return subsData.map((sub) => ({
                 url: this.createProxyUrl(sub.file, {
-                    ...this.STREAM_HEADERS,
+                    ...this.HEADERS,
                     Referer: subUrl
                 }),
                 format: 'vtt',
@@ -254,16 +196,12 @@ export class VidRockProvider extends BaseProvider {
 
     private async fetchPage(url: string): Promise<any | null> {
         try {
-            // Mengambil JSON kembali menggunakan HEADERS bawaan
             const response = await fetch(url, {
                 headers: { ...this.HEADERS, Referer: this.BASE_URL },
                 referrer: this.BASE_URL
             });
 
-            if (response.status !== 200) {
-                this.logSafe('Fetch Page Failed', `Status ${response.status} for ${url}`);
-                return null;
-            }
+            if (response.status !== 200) return null;
 
             const contentType = response.headers.get('content-type') ?? '';
 
@@ -272,8 +210,7 @@ export class VidRockProvider extends BaseProvider {
             }
 
             return await response.text();
-        } catch (error) {
-            this.logSafe('Fetch Page Exception', error);
+        } catch {
             return null;
         }
     }

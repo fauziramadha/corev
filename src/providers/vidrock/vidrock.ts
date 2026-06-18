@@ -78,8 +78,8 @@ export class VidRockProvider extends BaseProvider {
                         sources.push({
                             url: this.createProxyUrl(finalUrl, {
                                 ...this.HEADERS,
-                                Referer: 'https://lok-lok.cc/',
-                                Origin: 'https://lok-lok.cc/'
+                                Referer: 'https://vidrock.ru/',
+                                Origin: 'https://vidrock.ru'
                             }),
                             type: obj.url.includes('.mp4') ? 'mp4' : 'hls',
                             quality: obj.resolution + 'p',

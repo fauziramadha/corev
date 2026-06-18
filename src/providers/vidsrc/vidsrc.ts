@@ -73,21 +73,22 @@ export class HanerixProvider extends BaseProvider {
                 return this.emptyResult('Diblokir Cloudflare');
             }
 
-            // LANGKAH 2: Mengekstrak URL film (Mencari kata pertama dari judul untuk akurasi)
+            // LANGKAH 2: Mengekstrak URL film dengan Pengecualian Ketat
             const firstWord = media.title.split(' ')[0].toLowerCase().replace(/[^a-z0-9]+/g, '');
-            console.log(`[CCTV] Langkah 2 - Mencari tautan yang mengandung kata: ${firstWord}`);
+            console.log(`[CCTV] Langkah 2 - Mencari tautan murni untuk: ${firstWord}`);
             
-            const linkRegex = new RegExp(`href=["'](${this.BASE_URL}[^"']*?${firstWord}[^"']*?\\/?)["']`, 'i');
+            // PERBAIKAN REGEX: (?!search\/|feed\/|tag\/|category\/|wp-) digunakan untuk memblokir tautan palsu/sistem
+            const linkRegex = new RegExp(`href=["'](${this.BASE_URL}(?!search\\/|feed\\/|tag\\/|category\\/|wp-)[^"']*?${firstWord}[^"']*?\\/?)["']`, 'i');
             const linkMatch = searchHtml.match(linkRegex);
 
             if (!linkMatch || !linkMatch[1]) {
-                console.log(`[CCTV] GAGAL: Tautan film tidak ditemukan di halaman pencarian.`);
+                console.log(`[CCTV] GAGAL: Tautan film murni tidak ditemukan di hasil pencarian.`);
                 return this.emptyResult('Film tidak ditemukan di hasil pencarian');
             }
 
             let pageUrl = linkMatch[1];
             if (!pageUrl.endsWith('/')) pageUrl += '/';
-            console.log(`[CCTV] Langkah 3 - Berhasil menemukan tautan film: ${pageUrl}`);
+            console.log(`[CCTV] Langkah 3 - Berhasil menemukan tautan film murni: ${pageUrl}`);
 
             // LANGKAH 3: Mengunjungi halaman film
             const pageHtml = await this.fetchHtml(pageUrl, {
@@ -104,7 +105,7 @@ export class HanerixProvider extends BaseProvider {
             const iframeMatch = pageHtml.match(/<iframe[^>]+src=["'](https:\/\/hanerix\.com\/e\/[^"']+)["']/i);
             
             if (!iframeMatch || !iframeMatch[1]) {
-                console.log(`[CCTV] GAGAL: Iframe hanerix.com/e/ tidak ditemukan di dalam HTML.`);
+                console.log(`[CCTV] GAGAL: Iframe hanerix.com/e/ tidak ditemukan di dalam HTML halaman film.`);
                 return this.emptyResult('Tidak menemukan iframe Hanerix');
             }
 
@@ -172,6 +173,6 @@ export class HanerixProvider extends BaseProvider {
     }
 
     async healthCheck(): Promise<boolean> {
-        return true; // Bypass sementara agar cepat
+        return true;
     }
 }

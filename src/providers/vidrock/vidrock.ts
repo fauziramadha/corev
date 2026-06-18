@@ -17,13 +17,36 @@ export class VidRockProvider extends BaseProvider {
     readonly enabled = true;
     readonly BASE_URL = 'https://vidrock.ru/';
     readonly SUB_BASE_URL = 'https://sub.vdrk.site';
+    
+    // Header standar untuk mengambil data halaman (Mimetik Android)
     readonly HEADERS = {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
-        Accept: 'application/json, text/javascript, */*; q=0.01',
-        'Accept-Language': 'en-US,en;q=0.9',
-        Referer: this.BASE_URL,
-        Origin: this.BASE_URL
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': this.BASE_URL,
+        'Origin': this.BASE_URL,
+        'Sec-Ch-Ua': '"Chromium";v="139", "Not;A=Brand";v="99"',
+        'Sec-Ch-Ua-Mobile': '?1',
+        'Sec-Ch-Ua-Platform': '"Android"',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin'
+    };
+
+    // Header mutlak (Bunglon) khusus untuk menipu Cloudflare saat mengunduh pecahan video .ts
+    readonly PROXY_STREAM_HEADERS = {
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': this.BASE_URL,
+        'Origin': this.BASE_URL,
+        'Sec-Ch-Ua': '"Chromium";v="139", "Not;A=Brand";v="99"',
+        'Sec-Ch-Ua-Mobile': '?1',
+        'Sec-Ch-Ua-Platform': '"Android"',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'no-cors', // Mode krusial agar tidak dicekik
+        'Sec-Fetch-Site': 'same-site' // Mengaku sebagai orang dalam
     };
 
     readonly capabilities: ProviderCapabilities = {
@@ -76,10 +99,9 @@ export class VidRockProvider extends BaseProvider {
                         }
 
                         sources.push({
+                            // Menyuntikkan tameng pelindung ke dalam proksi
                             url: this.createProxyUrl(finalUrl, {
-                                ...this.HEADERS,
-                                Referer: 'https://vidrock.ru/',
-                                Origin: 'https://vidrock.ru'
+                                ...this.PROXY_STREAM_HEADERS
                             }),
                             type: obj.url.includes('.mp4') ? 'mp4' : 'hls',
                             quality: obj.resolution + 'p',
@@ -102,10 +124,11 @@ export class VidRockProvider extends BaseProvider {
                         stream.url,
                         stream.url.includes('67streams')
                             ? {
+                                  ...this.PROXY_STREAM_HEADERS,
                                   referrer: this.BASE_URL,
                                   origin: this.BASE_URL.replace('net/', 'net')
                               }
-                            : { ...this.HEADERS, Referer: this.BASE_URL }
+                            : { ...this.PROXY_STREAM_HEADERS }
                     );
                 }
 
@@ -122,7 +145,9 @@ export class VidRockProvider extends BaseProvider {
                             label: stream.language ?? 'Unknown'
                         }
                     ],
-                    provider: { id: this.id, name: this.name }
+                    provider: { id: this.id, name: this.name },
+                    // Mengirimkan header secara utuh ke frontend agar OMSS bisa mengeksekusinya
+                    headers: this.PROXY_STREAM_HEADERS 
                 });
             }
 

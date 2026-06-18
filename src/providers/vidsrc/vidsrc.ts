@@ -7,15 +7,39 @@ import type {
     Subtitle
 } from '@omss/framework';
 
-export class VidSrcProvider extends BaseProvider {
-    readonly id = 'vidsrc';
-    readonly name = 'VidSrc';
+export class HanerixProvider extends BaseProvider {
+    readonly id = 'hanerix';
+    readonly name = 'Hanerix (KlikXXI)';
     readonly enabled = true;
-    readonly BASE_URL = 'https://vidsrcme.ru';
+    
+    // Domain utama peladen video
+    readonly BASE_URL = 'https://hanerix.com/';
+    
+    // Tiket sesi Yandex Metrika hasil tangkapan Inspect Element
+    private readonly SESSION_COOKIES = '_ym_uid=1781814223377007935; _ym_d=1781814223; _ym_isad=2; _ym_visorc=b';
+
+    // Header untuk koneksi dasar
     readonly HEADERS = {
-        'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150 Safari/537.36',
-        Referer: this.BASE_URL
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Mobile Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Referer': 'https://hanerix.com/e/9xb50ftb077c',
+        'Origin': 'https://hanerix.com',
+        'Cookie': this.SESSION_COOKIES,
+        'Sec-Ch-Ua': '"Chromium";v="139", "Not;A=Brand";v="99"',
+        'Sec-Ch-Ua-Mobile': '?1',
+        'Sec-Ch-Ua-Platform': '"Android"',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin'
+    };
+
+    // Header mutlak yang akan dibungkus oleh proksi internal OMSS
+    readonly PROXY_STREAM_HEADERS = {
+        ...this.HEADERS,
+        'Sec-Fetch-Mode': 'no-cors',
+        'Sec-Fetch-Site': 'same-site'
     };
 
     readonly capabilities: ProviderCapabilities = {
@@ -34,146 +58,92 @@ export class VidSrcProvider extends BaseProvider {
         media: ProviderMediaObject
     ): Promise<ProviderResult> {
         try {
-            const pageUrl = this.buildPageUrl(media);
-            console.log(`[VidSrc Debug] 1. Menuju Ruang Tamu: ${pageUrl}`);
+            // 1. Dapatkan halaman/API yang memuat URL video
+            const pageUrl = await this.buildUrl(media);
+            const data = await this.fetchPage(pageUrl);
 
-            const html = await this.fetchPage(pageUrl, media);
-            if (!html) {
-                console.log(`[VidSrc Debug] ERROR: Ruang Tamu dikunci (Gagal fetch halaman pertama)`);
-                return this.emptyResult('Failed to fetch page', media);
+            if (!data) {
+                return this.emptyResult('Failed to fetch page or API');
             }
 
-            const secondUrl = this.extractSecondUrl(html);
-            if (!secondUrl) {
-                console.log(`[VidSrc Debug] ERROR: Brankas Iframe tidak ditemukan di Ruang Tamu`);
-                return this.emptyResult('Invalid or expired token', media);
-            }
-            console.log(`[VidSrc Debug] 2. Menuju Brankas Iframe: ${secondUrl.url}`);
+            const sources: Source[] = [];
+            const resp = data as any; 
 
-            const secondHtml = await this.fetchPage(secondUrl.url, media);
-            if (!secondHtml) {
-                console.log(`[VidSrc Debug] ERROR: Brankas Iframe kosong atau error`);
-                return this.emptyResult('Failed to fetch stream page', media);
-            }
+            // PENTING: Iterasi ini harus disesuaikan dengan struktur JSON/Response KlikXXI.
+            for (const [_, stream] of Object.entries(resp)) {
+                if (!(stream as any)?.url) continue;
 
-            const thirdUrl = this.extractThirdUrl(secondHtml, secondUrl.url);
-            if (!thirdUrl) {
-                console.log(`[VidSrc Debug] ERROR: Gagal mengekstrak URL ketiga dari dalam Iframe`);
-                return this.emptyResult('Failed to extract stream URL', media);
-            }
-            console.log(`[VidSrc Debug] 3. Menuju Server Video (RCP Gate): ${thirdUrl.url}`);
+                // Mengambil URL murni tanpa dibungkus proksi eksternal
+                const rawUrl: string = (stream as any).url;
 
-            // Taktik Lompatan Gaib (RCP Bypasser)
-            let finalStreamUrl = thirdUrl.url;
-            const rcpTokenMatch = finalStreamUrl.match(/\/prorcp\/([a-zA-Z0-9:=]+)/);
-            
-            if (rcpTokenMatch) {
-                const rawToken = rcpTokenMatch[1];
-                console.log(`[VidSrc Bypasser] Pos Satpam RCP terdeteksi. Mencuri kunci dengan token: ${rawToken.substring(0,20)}...`);
-                
-                try {
-                    const domainMatch = finalStreamUrl.match(/^(https?:\/\/[^\/]+)/);
-                    const baseDomain = domainMatch ? domainMatch[1] : 'https://cloudorchestranova.com';
-                    const verifyUrl = `${baseDomain}/rcp_verify`;
-                    
-                    const verifyRes = await fetch(verifyUrl, {
-                        method: 'POST',
-                        headers: {
-                            ...this.HEADERS,
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'Origin': baseDomain,
-                            'Referer': finalStreamUrl
-                        },
-                        body: `token=${encodeURIComponent(rawToken)}`
-                    });
-                    
-                    const rcpKey = await verifyRes.text();
-                    
-                    if (rcpKey && rcpKey.length === 32) {
-                        console.log(`[VidSrc Bypasser] Sukses! Kunci 32 karakter didapatkan: ${rcpKey}`);
-                        finalStreamUrl = `${finalStreamUrl}?_rcp=${rcpKey}`;
-                        console.log(`[VidSrc Bypasser] Membuka brankas asli: ${finalStreamUrl}`);
-                    } else {
-                        console.log(`[VidSrc Bypasser] Gagal mendapat kunci. Respon: ${rcpKey.substring(0,50)}`);
-                    }
-                } catch (bypassError) {
-                    console.log(`[VidSrc Bypasser] Error saat menembus pos satpam:`, bypassError);
-                }
+                // Menyelundupkan Header (Cookie & Referer) ke dalam Proksi Internal OMSS
+                const proxiedUrl = this.createProxyUrl(rawUrl, {
+                    ...this.PROXY_STREAM_HEADERS
+                });
+
+                sources.push({
+                    url: proxiedUrl, // Menggunakan URL aman hasil proksi internal
+                    type: rawUrl.includes('.mp4') ? 'mp4' : 'hls',
+                    quality: (stream as any).resolution ? (stream as any).resolution + 'p' : '1080p',
+                    audioTracks: [
+                        {
+                            language: 'unknown',
+                            label: 'Unknown'
+                        }
+                    ],
+                    provider: { id: this.id, name: this.name }
+                    // Properti 'headers' ditiadakan agar lolos pengecekan TypeScript Vercel
+                });
             }
 
-            const thirdHtml = await this.fetchPage(finalStreamUrl, media);
-            if (!thirdHtml) {
-                console.log(`[VidSrc Debug] ERROR: Server Video menolak akses ke brankas asli`);
-                return this.emptyResult('Failed to fetch final stream page', media);
-            }
-
-            const m3u8Urls = this.extractM3u8Urls(thirdHtml);
-            if (!m3u8Urls || m3u8Urls.length === 0) {
-                console.log(`[VidSrc Debug] ERROR: Mesin pengekstrak M3U8 (Regex) meleset/usang!`);
-                return this.emptyResult('Failed to extract m3u8 URLs', media);
-            }
-
-            console.log(`[VidSrc Debug] SUKSES! Ditemukan ${m3u8Urls.length} link video.`);
-
-            const sources: Source[] = m3u8Urls.map((url) => ({
-                url: this.createProxyUrl(url, {
-                    ...this.HEADERS,
-                    Referer: 'https://cloudnestra.com/',
-                    Origin: 'https://cloudnestra.com'
-                }),
-                type: 'hls',
-                quality: 'Auto',
-                audioTracks: [
-                    {
-                        label: 'English',
-                        language: 'eng'
-                    }
-                ],
-                provider: {
-                    id: this.id,
-                    name: this.name
-                }
-            }));
+            const subtitles = await this.fetchSubtitles(media);
 
             return {
                 sources,
-                subtitles: [],
+                subtitles,
                 diagnostics: []
             };
         } catch (error) {
-            console.log(`[VidSrc Debug] FATAL ERROR:`, error);
             return this.emptyResult(
                 error instanceof Error
                     ? error.message
-                    : 'Unknown provider error',
-                media
+                    : 'Unknown provider error'
             );
         }
     }
 
-    private buildPageUrl(media: ProviderMediaObject): string {
-        if (media.type === 'movie') {
-            return `${this.BASE_URL}/embed/movie?tmdb=${media.tmdbId}`;
-        } else {
-            return `${this.BASE_URL}/embed/tv?tmdb=${media.tmdbId}&season=${media.s}&episode=${media.e}`;
-        }
+    private async fetchSubtitles(
+        media: ProviderMediaObject
+    ): Promise<Subtitle[]> {
+        // Implementasi logika penarikan subtitel KlikXXI di sini jika ada
+        return [];
     }
 
-    private async fetchPage(
-        url: string,
-        media: ProviderMediaObject
-    ): Promise<string | null> {
-        try {
-            if (url.startsWith('//')) {
-                url = 'https:' + url;
-            }
+    private async buildUrl(media: ProviderMediaObject): Promise<string> {
+        // PENTING: Ganti logika ini dengan format endpoint API KlikXXI yang sebenarnya
+        let itemId: string;
+        if (media.type === 'tv') {
+            itemId = `${media.tmdbId}_${media.s}_${media.e}`;
+        } else {
+            itemId = `${media.tmdbId}`;
+        }
 
+        // URL sementara, wajib diganti dengan URL pemanggil asli dari KlikXXI
+        return `${this.BASE_URL}api/get_video/${itemId}`; 
+    }
+
+    private async fetchPage(url: string): Promise<any | null> {
+        try {
             const response = await fetch(url, {
                 headers: this.HEADERS
             });
 
-            if (response.status !== 200) {
-                return null;
+            if (response.status !== 200) return null;
+
+            const contentType = response.headers.get('content-type') ?? '';
+
+            if (contentType.includes('application/json')) {
+                return await response.json();
             }
 
             return await response.text();
@@ -182,106 +152,14 @@ export class VidSrcProvider extends BaseProvider {
         }
     }
 
-    private extractSecondUrl(html: string): { url: string } | null {
-        const src = html.match(
-            /<iframe[^>]*\s+src=["']([^"']+)["'][^>]*>/i
-        )?.[1];
-
-        if (!src) {
-            return null;
-        }
-
-        return { url: src };
-    }
-
-    private extractThirdUrl(
-        html: string,
-        secondUrl: string
-    ): { url: string } | null {
-        const relSrc = html.match(/src:\s*['"]([^'"]+)['"]/i)?.[1];
-        if (!relSrc) {
-            return null;
-        }
-
-        if (secondUrl.startsWith('//')) {
-            secondUrl = 'https:' + secondUrl;
-        }
-
-        let url: string;
-        try {
-            url = new URL(relSrc, secondUrl).href;
-        } catch {
-            return null;
-        }
-
-        return { url };
-    }
-
-    private extractM3u8Urls(thirdHtml: string): string[] | null {
-        // Karena kita sudah menembus RCP, kita coba lagi Regex asli yang ringan
-        const fileField = thirdHtml.match(/file\s*:\s*["']([^"']+)["']/i)?.[1];
-        
-        if (!fileField) {
-            console.log(`[VidSrc Senter X-Ray] Regex "file:" masih gagal! Mencari blok JavaScript yang disembunyikan...`);
-            
-            const scripts = thirdHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
-            if (scripts) {
-                scripts.forEach((script, index) => {
-                    if (script.length > 300 || script.toLowerCase().includes('m3u8') || script.toLowerCase().includes('atob')) {
-                        console.log(`[VidSrc Senter X-Ray] Ditemukan Script Mencurigakan #${index + 1}:`);
-                        console.log(script.substring(0, 2000));
-                    }
-                });
-            } else {
-                console.log(`[VidSrc Senter X-Ray] Ruangan ini kosong, tidak ada tag <script> sama sekali!`);
-            }
-            
-            const directM3u8 = thirdHtml.match(/(https:\/\/[^"']+\.m3u8[^"']*)/i);
-            if (directM3u8) {
-                console.log(`[VidSrc Senter X-Ray] Kutemukan link m3u8 langsung: ${directM3u8[1]}`);
-                return [directM3u8[1]];
-            }
-            
-            return null;
-        }
-
-        const playerDomains = new Map<string, string>();
-        playerDomains.set('{v1}', 'neonhorizonworkshops.com');
-        playerDomains.set('{v2}', 'wanderlynest.com');
-        playerDomains.set('{v3}', 'orchidpixelgardens.com');
-        playerDomains.set('{v4}', 'cloudnestra.com');
-
-        const rawUrls = fileField.split(/\s+or\s+/i);
-
-        const m3u8Urls = rawUrls.map((template) => {
-            let url = template;
-            for (const [placeholder, domain] of playerDomains.entries()) {
-                url = url.replace(placeholder, domain);
-            }
-            if (url.includes('{') || url.includes('}')) {
-                return null;
-            }
-            return url;
-        });
-
-        const filteredM3u8Urls = m3u8Urls.filter(
-            (url): url is string => url !== null
-        );
-
-        return filteredM3u8Urls.length > 0 ? filteredM3u8Urls : null;
-    }
-
-    private emptyResult(
-        message: string,
-        media: ProviderMediaObject
-    ): ProviderResult {
+    private emptyResult(message: string): ProviderResult {
         return {
             sources: [],
             subtitles: [],
             diagnostics: [
                 {
                     code: 'PROVIDER_ERROR',
-                    message: `${this.name}: ${message}.`,
+                    message: `${this.name}: ${message}`,
                     field: '',
                     severity: 'error'
                 }

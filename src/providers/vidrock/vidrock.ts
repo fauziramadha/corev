@@ -15,7 +15,7 @@ export class VidRockProvider extends BaseProvider {
     readonly id = 'vidrock';
     readonly name = 'VidRock';
     readonly enabled = true;
-    readonly BASE_URL = 'https://vidrock.net/';
+    readonly BASE_URL = 'https://vidrock.ru/';
     readonly SUB_BASE_URL = 'https://sub.vdrk.site';
     readonly HEADERS = {
         'User-Agent':

@@ -144,8 +144,8 @@ export class HanerixProvider extends BaseProvider {
 
             if (!iframeHtml) return this.emptyResult('Gagal memuat isi iframe rotasi');
 
-            // REVISI: Regex dilonggarkan agar bisa menangkap URL relatif (tanpa http://)
-            const m3u8Regex = /((?:https?:\/\/[a-zA-Z0-9.-]+)?\/stream\/[^"']+\.m3u8)/i;
+            // REVISI: Melonggarkan Regex agar menangkap alamat relatif dan mengabaikan format awalan folder
+            const m3u8Regex = /((?:https?:\/\/[^"'\s]+)?\/[^"'\s]+\.m3u8)/i;
             let m3u8Match = iframeHtml.match(m3u8Regex);
 
             // JIKA GAGAL: Aktifkan Mesin Pemecah Sandi JavaScript (Deobfuscator)
@@ -162,10 +162,10 @@ export class HanerixProvider extends BaseProvider {
 
             let rawUrl = m3u8Match[1];
             
-            // REVISI: STRATEGI MENYAMBUNG PETA
+            // REVISI: STRATEGI MENYAMBUNG PETA (Menangani Alamat Relatif)
             if (!rawUrl.startsWith('http')) {
                 console.log(`[CCTV] Langkah 7 - Alamat relatif terdeteksi: ${rawUrl}`);
-                // Menempelkan domain asal agar menjadi tautan utuh
+                // Menyambungkan domain asal menjadi satu tautan utuh
                 rawUrl = rawUrl.startsWith('/') ? `${dynamicOrigin}${rawUrl}` : `${dynamicOrigin}/${rawUrl}`;
             }
 
@@ -199,17 +199,20 @@ export class HanerixProvider extends BaseProvider {
     // Fungsi Mesin Pemecah Sandi JavaScript (JWPlayer Packer)
     private unpackEval(html: string): string {
         try {
-            // Mencari pola eval(function(p,a,c,k,e,d)...}('payload', 36, 123, 'dict'.split('|')))
-            const match = html.match(/}\s*\(\s*(['"])(.*?)\1\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(['"])(.*?)\5\.split\(['"]\|['"]\)/s);
-            if (!match) return html;
+            // REVISI: Menggunakan .* (greedy) agar bisa membaca seluruh teks tanpa tertipu tanda kutip sisipan
+            const match = html.match(/}\s*\(\s*['"](.*)['"]\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*['"](.*)['"]\.split\(['"]\|['"]\)/s);
+            if (!match) {
+                console.log(`[CCTV] Pemecah Sandi: Pola eval packer tidak ditemukan.`);
+                return html;
+            }
 
-            let p = match[2];
+            let p = match[1];
             // Mengembalikan karakter escape agar tidak merusak logika
             p = p.replace(/\\'/g, "'").replace(/\\"/g, '"');
             
-            const a = parseInt(match[3], 10);
-            let c = parseInt(match[4], 10);
-            const k = match[6].split('|');
+            const a = parseInt(match[2], 10);
+            let c = parseInt(match[3], 10);
+            const k = match[4].split('|');
 
             while (c--) {
                 if (k[c]) {

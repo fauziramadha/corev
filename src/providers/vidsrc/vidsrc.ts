@@ -62,31 +62,18 @@ export class HanerixProvider extends BaseProvider {
                 'Referer': 'https://google.com/'
             });
 
-            if (!searchHtml) {
-                console.log(`[CCTV] GAGAL: Tidak ada respon dari halaman pencarian KlikXXI.`);
-                return this.emptyResult('Gagal memuat halaman pencarian KlikXXI');
-            }
-            
-            if (searchHtml.includes('Cloudflare') || searchHtml.includes('Just a moment...')) {
-                console.log(`[CCTV] GAGAL: Diblokir oleh tembok Cloudflare KlikXXI!`);
-                return this.emptyResult('Diblokir Cloudflare');
-            }
+            if (!searchHtml) return this.emptyResult('Gagal memuat halaman pencarian');
 
-            // LANGKAH 2: Mengekstrak URL film dengan Pengecualian Ketat
+            // LANGKAH 2: Mengekstrak URL film
             const firstWord = media.title.split(' ')[0].toLowerCase().replace(/[^a-z0-9]+/g, '');
-            console.log(`[CCTV] Langkah 2 - Mencari tautan murni untuk: ${firstWord}`);
-            
             const linkRegex = new RegExp(`href=["'](${this.BASE_URL}(?!search\\/|feed\\/|tag\\/|category\\/|wp-)[^"']*?${firstWord}[^"']*?\\/?)["']`, 'i');
             const linkMatch = searchHtml.match(linkRegex);
 
-            if (!linkMatch || !linkMatch[1]) {
-                console.log(`[CCTV] GAGAL: Tautan film murni tidak ditemukan di hasil pencarian.`);
-                return this.emptyResult('Film tidak ditemukan di hasil pencarian');
-            }
+            if (!linkMatch || !linkMatch[1]) return this.emptyResult('Film tidak ditemukan di hasil pencarian');
 
             let pageUrl = linkMatch[1];
             if (!pageUrl.endsWith('/')) pageUrl += '/';
-            console.log(`[CCTV] Langkah 3 - Berhasil menemukan tautan film murni: ${pageUrl}`);
+            console.log(`[CCTV] Langkah 3 - Mengunjungi halaman film: ${pageUrl}`);
 
             // LANGKAH 3: Mengunjungi halaman film
             const pageHtml = await this.fetchHtml(pageUrl, {
@@ -94,25 +81,70 @@ export class HanerixProvider extends BaseProvider {
                 'Referer': searchUrl
             });
 
-            if (!pageHtml) {
-                console.log(`[CCTV] GAGAL: Gagal memuat halaman film.`);
-                return this.emptyResult('Gagal memuat halaman film KlikXXI');
+            if (!pageHtml) return this.emptyResult('Gagal memuat halaman film');
+
+            // Cek Cloudflare Level 2
+            if (pageHtml.includes('Cloudflare') || pageHtml.includes('Just a moment...')) {
+                console.log(`[CCTV] GAGAL: Halaman film utama diblokir oleh Cloudflare!`);
+                return this.emptyResult('Diblokir Cloudflare di halaman film');
             }
 
-            // LANGKAH 4: STRATEGI BUNGLON - Menangkap domain dinamis
-            // Menangkap pola https://[domain-apapun]/e/[id-acak]
+            // LANGKAH 4: PEMINDAI FORENSIK
             const iframeRegex = /(https?:\/\/[a-zA-Z0-9.-]+\/e\/[a-zA-Z0-9_-]+)/i;
             const iframeMatch = pageHtml.match(iframeRegex);
             
-            if (!iframeMatch || !iframeMatch[1]) {
-                console.log(`[CCTV] GAGAL: Pola tautan /e/ tidak ditemukan sama sekali di dalam HTML halaman film.`);
-                return this.emptyResult('Tidak menemukan iframe video rotasi');
+            let iframeUrl = '';
+
+            if (iframeMatch && iframeMatch[1]) {
+                iframeUrl = iframeMatch[1];
+                console.log(`[CCTV] Langkah 4 - Ketemu Langsung: ${iframeUrl}`);
+            } else {
+                console.log(`[CCTV] Memulai Pemindaian Forensik HTML...`);
+                
+                // Cek AJAX WordPress (Sistem klik tombol Play)
+                if (pageHtml.includes('admin-ajax.php')) {
+                    console.log(`[CCTV] FORENSIK: Situs ini menggunakan AJAX (Video disembunyikan dan butuh klik).`);
+                    
+                    // Mencari ID Film (Biasanya ada di atribut data-post atau id)
+                    const postIdMatch = pageHtml.match(/data-post=["']?(\d+)["']?/i) || 
+                                        pageHtml.match(/post_id\s*=\s*["']?(\d+)["']?/i) || 
+                                        pageHtml.match(/id=["']?post-(\d+)["']?/i);
+                                        
+                    if (postIdMatch) {
+                        console.log(`[CCTV] FORENSIK: ID Film Rahasia ditemukan -> ${postIdMatch[1]}`);
+                    }
+                }
+
+                // Cek Sandi Base64
+                const b64Regex = /["']([A-Za-z0-9+/]{40,}=*)["']/g;
+                const b64Matches = pageHtml.match(b64Regex);
+                let b64Found = false;
+
+                if (b64Matches) {
+                    for (const b64 of b64Matches) {
+                        try {
+                            // Menghilangkan tanda kutip
+                            const cleanB64 = b64.replace(/["']/g, '');
+                            const decoded = atob(cleanB64);
+                            if (decoded.includes('http') || decoded.includes('iframe')) {
+                                console.log(`[CCTV] FORENSIK: Sandi Base64 berhasil dipecahkan -> ${decoded.substring(0, 100)}...`);
+                                b64Found = true;
+                                // Jika ada URL iframe di dalamnya, tangkap!
+                                const extractMatch = decoded.match(iframeRegex);
+                                if (extractMatch) iframeUrl = extractMatch[1];
+                                break;
+                            }
+                        } catch(e) { } // Abaikan jika gagal dekripsi
+                    }
+                }
+                
+                if (!b64Found) console.log(`[CCTV] FORENSIK: Tidak ada teks sandi Base64 yang relevan.`);
+
+                if (!iframeUrl) return this.emptyResult('Iframe tidak ditemukan setelah forensik');
             }
 
-            const iframeUrl = iframeMatch[1];
-            const dynamicOrigin = new URL(iframeUrl).origin; // Ekstrak nama domain utama (contoh: https://vibuxer.com)
-            
-            console.log(`[CCTV] Langkah 4 - Berhasil menangkap Iframe: ${iframeUrl} (Domain: ${dynamicOrigin})`);
+            const dynamicOrigin = new URL(iframeUrl).origin;
+            console.log(`[CCTV] Langkah 4 - Eksekusi Iframe: ${iframeUrl} (Domain: ${dynamicOrigin})`);
 
             // LANGKAH 5: Membuka URL rotasi untuk mencari m3u8
             const iframeHtml = await this.fetchHtml(iframeUrl, {
@@ -120,13 +152,9 @@ export class HanerixProvider extends BaseProvider {
                 'Referer': pageUrl 
             });
 
-            if (!iframeHtml) {
-                console.log(`[CCTV] GAGAL: Gagal memuat isi halaman iframe dinamis.`);
-                return this.emptyResult('Gagal memuat halaman iframe');
-            }
+            if (!iframeHtml) return this.emptyResult('Gagal memuat halaman iframe');
 
-            // LANGKAH 6: Ekstrak m3u8 (Sapu jagat semua rotasi domain)
-            // Menangkap pola https://[domain-apapun]/stream/[...].m3u8
+            // LANGKAH 6: Ekstrak m3u8
             const m3u8Regex = /(https?:\/\/[a-zA-Z0-9.-]+\/stream\/[^"']+\.m3u8)/i;
             const m3u8Match = iframeHtml.match(m3u8Regex);
 
@@ -138,24 +166,25 @@ export class HanerixProvider extends BaseProvider {
             const rawUrl = m3u8Match[1];
             console.log(`[CCTV] Langkah Akhir - SUKSES menemukan m3u8: ${rawUrl}`);
 
-            // Eksekusi proksi dengan header origin dinamis
             const proxiedUrl = this.createProxyUrl(rawUrl, {
                 ...this.PROXY_STREAM_HEADERS,
                 'Referer': iframeUrl,
                 'Origin': dynamicOrigin
             });
 
-            const sources: Source[] = [
-                {
-                    url: proxiedUrl,
-                    type: 'hls',
-                    quality: '1080p', 
-                    audioTracks: [{ language: 'unknown', label: 'Unknown' }],
-                    provider: { id: this.id, name: this.name }
-                }
-            ];
-
-            return { sources, subtitles: [], diagnostics: [] };
+            return {
+                sources: [
+                    {
+                        url: proxiedUrl,
+                        type: 'hls',
+                        quality: '1080p', 
+                        audioTracks: [{ language: 'unknown', label: 'Unknown' }],
+                        provider: { id: this.id, name: this.name }
+                    }
+                ],
+                subtitles: [], 
+                diagnostics: []
+            };
 
         } catch (error) {
             console.log(`[CCTV] GAGAL SISTEM: ${error instanceof Error ? error.message : 'Unknown'}`);

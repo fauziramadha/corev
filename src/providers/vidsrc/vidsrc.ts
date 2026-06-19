@@ -13,7 +13,6 @@ export class HanerixProvider extends BaseProvider {
     readonly enabled = true;
     
     readonly BASE_URL = 'https://klikxxi.me/';
-    readonly HANERIX_URL = 'https://hanerix.com/';
     
     private readonly SESSION_COOKIES = '_ym_uid=1781814223377007935; _ym_d=1781814223; _ym_isad=2; _ym_visorc=b';
 
@@ -77,7 +76,6 @@ export class HanerixProvider extends BaseProvider {
             const firstWord = media.title.split(' ')[0].toLowerCase().replace(/[^a-z0-9]+/g, '');
             console.log(`[CCTV] Langkah 2 - Mencari tautan murni untuk: ${firstWord}`);
             
-            // PERBAIKAN REGEX: (?!search\/|feed\/|tag\/|category\/|wp-) digunakan untuk memblokir tautan palsu/sistem
             const linkRegex = new RegExp(`href=["'](${this.BASE_URL}(?!search\\/|feed\\/|tag\\/|category\\/|wp-)[^"']*?${firstWord}[^"']*?\\/?)["']`, 'i');
             const linkMatch = searchHtml.match(linkRegex);
 
@@ -101,45 +99,50 @@ export class HanerixProvider extends BaseProvider {
                 return this.emptyResult('Gagal memuat halaman film KlikXXI');
             }
 
-            // LANGKAH 4: Mencari URL Hanerix (REVISI: Menangkap dari mana saja, tidak harus iframe)
-            const hanerixMatch = pageHtml.match(/(https:\/\/hanerix\.com\/e\/[a-zA-Z0-9]+)/i);
+            // LANGKAH 4: STRATEGI BUNGLON - Menangkap domain dinamis
+            // Menangkap pola https://[domain-apapun]/e/[id-acak]
+            const iframeRegex = /(https?:\/\/[a-zA-Z0-9.-]+\/e\/[a-zA-Z0-9_-]+)/i;
+            const iframeMatch = pageHtml.match(iframeRegex);
             
-            if (!hanerixMatch || !hanerixMatch[1]) {
-                console.log(`[CCTV] GAGAL: hanerix.com/e/ tidak ditemukan sama sekali di dalam HTML halaman film.`);
-                // Mengintip HTML jika gagal
-                console.log(`[CCTV] Cuplikan HTML: ${pageHtml.substring(0, 300)}...`);
-                return this.emptyResult('Tidak menemukan URL Hanerix');
+            if (!iframeMatch || !iframeMatch[1]) {
+                console.log(`[CCTV] GAGAL: Pola tautan /e/ tidak ditemukan sama sekali di dalam HTML halaman film.`);
+                return this.emptyResult('Tidak menemukan iframe video rotasi');
             }
 
-            const iframeUrl = hanerixMatch[1];
-            console.log(`[CCTV] Langkah 4 - Berhasil menemukan URL Hanerix: ${iframeUrl}`);
+            const iframeUrl = iframeMatch[1];
+            const dynamicOrigin = new URL(iframeUrl).origin; // Ekstrak nama domain utama (contoh: https://vibuxer.com)
+            
+            console.log(`[CCTV] Langkah 4 - Berhasil menangkap Iframe: ${iframeUrl} (Domain: ${dynamicOrigin})`);
 
-            // LANGKAH 5: Membuka URL Hanerix untuk mencari m3u8
+            // LANGKAH 5: Membuka URL rotasi untuk mencari m3u8
             const iframeHtml = await this.fetchHtml(iframeUrl, {
                 ...this.HEADERS,
                 'Referer': pageUrl 
             });
 
             if (!iframeHtml) {
-                console.log(`[CCTV] GAGAL: Gagal memuat isi halaman Hanerix.`);
-                return this.emptyResult('Gagal memuat halaman Hanerix');
+                console.log(`[CCTV] GAGAL: Gagal memuat isi halaman iframe dinamis.`);
+                return this.emptyResult('Gagal memuat halaman iframe');
             }
 
-            // LANGKAH 6: Ekstrak m3u8
-            const m3u8Match = iframeHtml.match(/(https:\/\/hanerix\.com\/stream\/[^"']+\.m3u8)/i);
+            // LANGKAH 6: Ekstrak m3u8 (Sapu jagat semua rotasi domain)
+            // Menangkap pola https://[domain-apapun]/stream/[...].m3u8
+            const m3u8Regex = /(https?:\/\/[a-zA-Z0-9.-]+\/stream\/[^"']+\.m3u8)/i;
+            const m3u8Match = iframeHtml.match(m3u8Regex);
 
             if (!m3u8Match || !m3u8Match[1]) {
-                console.log(`[CCTV] GAGAL: Tautan .m3u8 tidak ditemukan di dalam skrip Hanerix.`);
+                console.log(`[CCTV] GAGAL: Tautan .m3u8 tidak ditemukan di dalam skrip iframe.`);
                 return this.emptyResult('Tautan master.m3u8 tidak ditemukan');
             }
 
             const rawUrl = m3u8Match[1];
             console.log(`[CCTV] Langkah Akhir - SUKSES menemukan m3u8: ${rawUrl}`);
 
+            // Eksekusi proksi dengan header origin dinamis
             const proxiedUrl = this.createProxyUrl(rawUrl, {
                 ...this.PROXY_STREAM_HEADERS,
                 'Referer': iframeUrl,
-                'Origin': this.HANERIX_URL.replace(/\/$/, '')
+                'Origin': dynamicOrigin
             });
 
             const sources: Source[] = [

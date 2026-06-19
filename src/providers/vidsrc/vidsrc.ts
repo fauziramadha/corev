@@ -144,7 +144,8 @@ export class HanerixProvider extends BaseProvider {
 
             if (!iframeHtml) return this.emptyResult('Gagal memuat isi iframe rotasi');
 
-            const m3u8Regex = /(https?:\/\/[a-zA-Z0-9.-]+\/stream\/[^"']+\.m3u8)/i;
+            // REVISI: Regex dilonggarkan agar bisa menangkap URL relatif (tanpa http://)
+            const m3u8Regex = /((?:https?:\/\/[a-zA-Z0-9.-]+)?\/stream\/[^"']+\.m3u8)/i;
             let m3u8Match = iframeHtml.match(m3u8Regex);
 
             // JIKA GAGAL: Aktifkan Mesin Pemecah Sandi JavaScript (Deobfuscator)
@@ -159,7 +160,15 @@ export class HanerixProvider extends BaseProvider {
                 return this.emptyResult('Tautan master.m3u8 tidak ditemukan');
             }
 
-            const rawUrl = m3u8Match[1];
+            let rawUrl = m3u8Match[1];
+            
+            // REVISI: STRATEGI MENYAMBUNG PETA
+            if (!rawUrl.startsWith('http')) {
+                console.log(`[CCTV] Langkah 7 - Alamat relatif terdeteksi: ${rawUrl}`);
+                // Menempelkan domain asal agar menjadi tautan utuh
+                rawUrl = rawUrl.startsWith('/') ? `${dynamicOrigin}${rawUrl}` : `${dynamicOrigin}/${rawUrl}`;
+            }
+
             console.log(`[CCTV] Langkah Akhir - SUKSES menemukan m3u8: ${rawUrl}`);
 
             // Membungkus URL menggunakan proksi OMSS

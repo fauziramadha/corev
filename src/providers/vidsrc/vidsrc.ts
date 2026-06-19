@@ -145,10 +145,17 @@ export class HanerixProvider extends BaseProvider {
             if (!iframeHtml) return this.emptyResult('Gagal memuat isi iframe rotasi');
 
             const m3u8Regex = /(https?:\/\/[a-zA-Z0-9.-]+\/stream\/[^"']+\.m3u8)/i;
-            const m3u8Match = iframeHtml.match(m3u8Regex);
+            let m3u8Match = iframeHtml.match(m3u8Regex);
+
+            // JIKA GAGAL: Aktifkan Mesin Pemecah Sandi JavaScript (Deobfuscator)
+            if (!m3u8Match || !m3u8Match[1]) {
+                console.log(`[CCTV] Langkah 7 - M3U8 disandikan! Menjalankan Mesin Pemecah Sandi...`);
+                const unpackedHtml = this.unpackEval(iframeHtml);
+                m3u8Match = unpackedHtml.match(m3u8Regex);
+            }
 
             if (!m3u8Match || !m3u8Match[1]) {
-                console.log(`[CCTV] GAGAL: Tautan master.m3u8 tidak ditemukan.`);
+                console.log(`[CCTV] GAGAL: Tautan master.m3u8 tidak ditemukan meski sandi telah dipecahkan.`);
                 return this.emptyResult('Tautan master.m3u8 tidak ditemukan');
             }
 
@@ -177,6 +184,37 @@ export class HanerixProvider extends BaseProvider {
         } catch (error) {
             console.log(`[CCTV] GAGAL SISTEM: ${error instanceof Error ? error.message : 'Unknown'}`);
             return this.emptyResult(error instanceof Error ? error.message : 'Unknown error');
+        }
+    }
+
+    // Fungsi Mesin Pemecah Sandi JavaScript (JWPlayer Packer)
+    private unpackEval(html: string): string {
+        try {
+            // Mencari pola eval(function(p,a,c,k,e,d)...}('payload', 36, 123, 'dict'.split('|')))
+            const match = html.match(/}\s*\(\s*(['"])(.*?)\1\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(['"])(.*?)\5\.split\(['"]\|['"]\)/s);
+            if (!match) return html;
+
+            let p = match[2];
+            // Mengembalikan karakter escape agar tidak merusak logika
+            p = p.replace(/\\'/g, "'").replace(/\\"/g, '"');
+            
+            const a = parseInt(match[3], 10);
+            let c = parseInt(match[4], 10);
+            const k = match[6].split('|');
+
+            while (c--) {
+                if (k[c]) {
+                    // Menerjemahkan setiap kata di payload menggunakan kamus
+                    const radix = c.toString(a);
+                    const regex = new RegExp('\\b' + radix + '\\b', 'g');
+                    p = p.replace(regex, () => k[c]);
+                }
+            }
+            console.log(`[CCTV] Pemecah Sandi Berhasil Mengekstrak Tautan!`);
+            return p;
+        } catch (e) {
+            console.log(`[CCTV] Pemecah Sandi Gagal: ${e}`);
+            return html;
         }
     }
 

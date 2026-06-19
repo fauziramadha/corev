@@ -101,33 +101,35 @@ export class HanerixProvider extends BaseProvider {
                 return this.emptyResult('Gagal memuat halaman film KlikXXI');
             }
 
-            // LANGKAH 4: Mencari Iframe
-            const iframeMatch = pageHtml.match(/<iframe[^>]+src=["'](https:\/\/hanerix\.com\/e\/[^"']+)["']/i);
+            // LANGKAH 4: Mencari URL Hanerix (REVISI: Menangkap dari mana saja, tidak harus iframe)
+            const hanerixMatch = pageHtml.match(/(https:\/\/hanerix\.com\/e\/[a-zA-Z0-9]+)/i);
             
-            if (!iframeMatch || !iframeMatch[1]) {
-                console.log(`[CCTV] GAGAL: Iframe hanerix.com/e/ tidak ditemukan di dalam HTML halaman film.`);
-                return this.emptyResult('Tidak menemukan iframe Hanerix');
+            if (!hanerixMatch || !hanerixMatch[1]) {
+                console.log(`[CCTV] GAGAL: hanerix.com/e/ tidak ditemukan sama sekali di dalam HTML halaman film.`);
+                // Mengintip HTML jika gagal
+                console.log(`[CCTV] Cuplikan HTML: ${pageHtml.substring(0, 300)}...`);
+                return this.emptyResult('Tidak menemukan URL Hanerix');
             }
 
-            const iframeUrl = iframeMatch[1];
-            console.log(`[CCTV] Langkah 4 - Berhasil menemukan Iframe: ${iframeUrl}`);
+            const iframeUrl = hanerixMatch[1];
+            console.log(`[CCTV] Langkah 4 - Berhasil menemukan URL Hanerix: ${iframeUrl}`);
 
-            // LANGKAH 5: Membuka Iframe untuk mencari m3u8
+            // LANGKAH 5: Membuka URL Hanerix untuk mencari m3u8
             const iframeHtml = await this.fetchHtml(iframeUrl, {
                 ...this.HEADERS,
                 'Referer': pageUrl 
             });
 
             if (!iframeHtml) {
-                console.log(`[CCTV] GAGAL: Gagal memuat isi iframe Hanerix.`);
-                return this.emptyResult('Gagal memuat iframe Hanerix');
+                console.log(`[CCTV] GAGAL: Gagal memuat isi halaman Hanerix.`);
+                return this.emptyResult('Gagal memuat halaman Hanerix');
             }
 
             // LANGKAH 6: Ekstrak m3u8
             const m3u8Match = iframeHtml.match(/(https:\/\/hanerix\.com\/stream\/[^"']+\.m3u8)/i);
 
             if (!m3u8Match || !m3u8Match[1]) {
-                console.log(`[CCTV] GAGAL: Tautan .m3u8 tidak ditemukan di dalam skrip iframe.`);
+                console.log(`[CCTV] GAGAL: Tautan .m3u8 tidak ditemukan di dalam skrip Hanerix.`);
                 return this.emptyResult('Tautan master.m3u8 tidak ditemukan');
             }
 

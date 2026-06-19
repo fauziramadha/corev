@@ -123,7 +123,7 @@ export class HanerixProvider extends BaseProvider {
             if (ajaxResponse.status !== 200) return this.emptyResult('Permintaan AJAX ditolak peladen');
             const ajaxHtml = await ajaxResponse.text();
 
-            // LANGKAH 6: STRATEGI BUNGLON - Menangkap domain dinamis (vibuxer, hgcloud, dll)
+            // LANGKAH 6: STRATEGI BUNGLON - Menangkap domain dinamis (hgcloud, dll)
             const iframeRegex = /(https?:\/\/[a-zA-Z0-9.-]+\/e\/[a-zA-Z0-9_-]+)/i;
             const iframeMatch = ajaxHtml.match(iframeRegex);
             
@@ -133,25 +133,73 @@ export class HanerixProvider extends BaseProvider {
             }
 
             const iframeUrl = iframeMatch[1];
-            const dynamicOrigin = new URL(iframeUrl).origin;
-            console.log(`[CCTV] Langkah 6 - Tautan Iframe: ${iframeUrl} (Domain: ${dynamicOrigin})`);
+            console.log(`[CCTV] Langkah 6 - Tautan Iframe Rotasi: ${iframeUrl}`);
 
-            // LANGKAH 7: Eksekusi Iframe & Ekstrak M3U8
-            const iframeHtml = await this.fetchHtml(iframeUrl, {
-                ...this.HEADERS,
-                'Referer': pageUrl 
+            // LANGKAH 7: PEMBURU LEMPARAN (Redirect Hunter)
+            console.log(`[CCTV] Langkah 7 - Mencegat Lemparan di Pintu Depan...`);
+            
+            // 7A: Ketuk pintu pertama (hgcloud.to) dan matikan lompatan otomatis
+            const iframeResponse = await fetch(iframeUrl, {
+                method: 'GET',
+                headers: {
+                    ...this.HEADERS,
+                    'Referer': pageUrl
+                },
+                redirect: 'manual' // CEGAT LOMPATAN
             });
 
-            if (!iframeHtml) return this.emptyResult('Gagal memuat isi iframe rotasi');
+            let targetHtml = '';
+            let targetUrl = iframeUrl;
 
-            // REVISI: Melonggarkan Regex agar menangkap alamat relatif dan mengabaikan format awalan folder
+            // 7B: Memeriksa apakah kita dilempar (Status 301, 302, dll)
+            if (iframeResponse.status >= 300 && iframeResponse.status < 400) {
+                const locationHeader = iframeResponse.headers.get('location');
+                if (locationHeader) {
+                    // Menyusun URL tujuan asli (misal: hanerix.com atau vibuxer.com)
+                    targetUrl = new URL(locationHeader, iframeUrl).href;
+                    console.log(`[CCTV] Langkah 7 - Lemparan Terdeteksi! Menuju sarang asli: ${targetUrl}`);
+                    
+                    // 7C: Mengetuk pintu sarang asli dengan membawa TIKET VIP (Referer KlikXXI)
+                    const realResponse = await fetch(targetUrl, {
+                        method: 'GET',
+                        headers: {
+                            ...this.HEADERS,
+                            'Referer': pageUrl
+                        }
+                    });
+
+                    if (realResponse.status === 200) {
+                        targetHtml = await realResponse.text();
+                        console.log(`[CCTV] Langkah 7 - Berhasil menyusup ke sarang asli.`);
+                    } else {
+                        console.log(`[CCTV] GAGAL: Sarang asli menolak ketukan pintu (${realResponse.status}).`);
+                        return this.emptyResult('Ditolak oleh peladen tujuan');
+                    }
+                } else {
+                    console.log(`[CCTV] GAGAL: Ada perintah lemparan tapi alamat tujuan kosong.`);
+                    return this.emptyResult('Gagal melacak tujuan lemparan');
+                }
+            } else if (iframeResponse.status === 200) {
+                console.log(`[CCTV] Langkah 7 - Tidak ada lemparan. Langsung masuk.`);
+                targetHtml = await iframeResponse.text();
+            } else {
+                console.log(`[CCTV] GAGAL: Pintu Iframe rusak (${iframeResponse.status}).`);
+                return this.emptyResult('Iframe gagal merespons');
+            }
+
+            if (!targetHtml) return this.emptyResult('Isi HTML sarang kosong');
+
+            // Kita gunakan domain sarang asli untuk menyambung peta nanti
+            const finalOrigin = new URL(targetUrl).origin;
+
+            // LANGKAH 8: Ekstrak M3U8 & Pemecah Sandi
             const m3u8Regex = /((?:https?:\/\/[^"'\s]+)?\/[^"'\s]+\.m3u8)/i;
-            let m3u8Match = iframeHtml.match(m3u8Regex);
+            let m3u8Match = targetHtml.match(m3u8Regex);
 
-            // JIKA GAGAL: Aktifkan Mesin Pemecah Sandi JavaScript (Deobfuscator)
+            // Jika masih disandikan, aktifkan Mesin Pemecah Sandi
             if (!m3u8Match || !m3u8Match[1]) {
-                console.log(`[CCTV] Langkah 7 - M3U8 disandikan! Menjalankan Mesin Pemecah Sandi...`);
-                const unpackedHtml = this.unpackEval(iframeHtml);
+                console.log(`[CCTV] Langkah 8 - M3U8 disandikan! Menjalankan Mesin Pemecah Sandi...`);
+                const unpackedHtml = this.unpackEval(targetHtml);
                 m3u8Match = unpackedHtml.match(m3u8Regex);
             }
 
@@ -162,11 +210,11 @@ export class HanerixProvider extends BaseProvider {
 
             let rawUrl = m3u8Match[1];
             
-            // REVISI: STRATEGI MENYAMBUNG PETA (Menangani Alamat Relatif)
+            // STRATEGI MENYAMBUNG PETA (Jika alamatnya relatif / tidak ada http)
             if (!rawUrl.startsWith('http')) {
-                console.log(`[CCTV] Langkah 7 - Alamat relatif terdeteksi: ${rawUrl}`);
-                // Menyambungkan domain asal menjadi satu tautan utuh
-                rawUrl = rawUrl.startsWith('/') ? `${dynamicOrigin}${rawUrl}` : `${dynamicOrigin}/${rawUrl}`;
+                console.log(`[CCTV] Langkah 8 - Alamat relatif terdeteksi: ${rawUrl}`);
+                // Menyambung dengan domain sarang asli (misal hanerix.com/...)
+                rawUrl = rawUrl.startsWith('/') ? `${finalOrigin}${rawUrl}` : `${finalOrigin}/${rawUrl}`;
             }
 
             console.log(`[CCTV] Langkah Akhir - SUKSES menemukan m3u8: ${rawUrl}`);
@@ -174,8 +222,8 @@ export class HanerixProvider extends BaseProvider {
             // Membungkus URL menggunakan proksi OMSS
             const proxiedUrl = this.createProxyUrl(rawUrl, {
                 ...this.PROXY_STREAM_HEADERS,
-                'Referer': iframeUrl,
-                'Origin': dynamicOrigin
+                'Referer': targetUrl,
+                'Origin': finalOrigin
             });
 
             const sources: Source[] = [
@@ -199,15 +247,13 @@ export class HanerixProvider extends BaseProvider {
     // Fungsi Mesin Pemecah Sandi JavaScript (JWPlayer Packer)
     private unpackEval(html: string): string {
         try {
-            // REVISI: Menggunakan .* (greedy) agar bisa membaca seluruh teks tanpa tertipu tanda kutip sisipan
             const match = html.match(/}\s*\(\s*['"](.*)['"]\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*['"](.*)['"]\.split\(['"]\|['"]\)/s);
             if (!match) {
-                console.log(`[CCTV] Pemecah Sandi: Pola eval packer tidak ditemukan.`);
+                console.log(`[CCTV] Pemecah Sandi: Pola eval packer tidak ditemukan di dalam HTML.`);
                 return html;
             }
 
             let p = match[1];
-            // Mengembalikan karakter escape agar tidak merusak logika
             p = p.replace(/\\'/g, "'").replace(/\\"/g, '"');
             
             const a = parseInt(match[2], 10);
@@ -216,7 +262,6 @@ export class HanerixProvider extends BaseProvider {
 
             while (c--) {
                 if (k[c]) {
-                    // Menerjemahkan setiap kata di payload menggunakan kamus
                     const radix = c.toString(a);
                     const regex = new RegExp('\\b' + radix + '\\b', 'g');
                     p = p.replace(regex, () => k[c]);
@@ -234,24 +279,12 @@ export class HanerixProvider extends BaseProvider {
     private detectQuality(html: string): string {
         const text = html.toUpperCase();
         
-        // 5. HD (WEBDL, BLURAY) -> Kualitas Tinggi
-        if (text.includes('BLURAY') || text.includes('WEB-DL') || text.includes('WEBDL') || text.includes('HD 1080')) {
-            return '1080p';
-        }
-        // 4. HDRIP -> Kualitas Menengah Atas
-        if (text.includes('HDRIP') || text.includes('HD 720')) {
-            return '720p';
-        }
-        // Kualitas Rendah / Perekaman Bioskop (1. CAM, 2. HDTS, 3. HDTC)
-        if (text.includes('HDTC') || text.includes('HDTS') || text.includes('CAM')) {
-            return 'unknown'; 
-        }
-        // Deteksi HD umum
-        if (text.includes(' HD ')) {
-            return '1080p';
-        }
+        if (text.includes('BLURAY') || text.includes('WEB-DL') || text.includes('WEBDL') || text.includes('HD 1080')) return '1080p';
+        if (text.includes('HDRIP') || text.includes('HD 720')) return '720p';
+        if (text.includes('HDTC') || text.includes('HDTS') || text.includes('CAM')) return 'unknown'; 
+        if (text.includes(' HD ')) return '1080p';
         
-        return 'unknown'; // Bawaan jika tidak ada tanda apa-apa
+        return 'unknown'; 
     }
 
     private async fetchHtml(url: string, headers: Record<string, string>): Promise<string | null> {

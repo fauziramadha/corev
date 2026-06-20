@@ -82,7 +82,8 @@ export class HanerixProvider extends BaseProvider {
                 return this.emptyResult('Jalur WP-JSON gagal diakses');
             }
 
-            const apiData = await apiResponse.json();
+            // PERBAIKAN TS: Memaksa TypeScript menganggap data ini sebagai daftar/array
+            const apiData = (await apiResponse.json()) as any[];
 
             if (!apiData || apiData.length === 0) {
                 console.log(`[CCTV] GAGAL: Film tidak ditemukan di dalam brankas JSON.`);

@@ -52,14 +52,14 @@ export class HanerixProvider extends BaseProvider {
             console.log(`[CCTV] =======================================`);
             console.log(`[CCTV] Memulai Operasi: ${media.title}`);
             
-            // LANGKAH 0: Pemanen Tiket (Opsional, agar terlihat natural)
+            // LANGKAH 0: Pemanen Tiket 
             let activeCookies = this.SESSION_COOKIES;
             try {
                 const initResponse = await fetch(this.BASE_URL, { headers: this.HEADERS });
                 const setCookie = initResponse.headers.get('set-cookie');
                 if (setCookie) activeCookies = setCookie;
             } catch (e) {
-                // Abaikan jika gagal
+                // Abaikan
             }
 
             const dynamicHeaders = {
@@ -67,10 +67,10 @@ export class HanerixProvider extends BaseProvider {
                 'Cookie': activeCookies
             };
             
-            // LANGKAH 1: JALUR TOL WP-JSON (Mengetuk Pintu Belakang)
+            // LANGKAH 1: MENYELINAP (Jalur WP-JSON)
             const searchQuery = encodeURIComponent(media.title);
             const apiUrl = `${this.BASE_URL}wp-json/wp/v2/posts?search=${searchQuery}`;
-            console.log(`[CCTV] Langkah 1 - Mengetuk Pintu Belakang JSON: ${apiUrl}`);
+            console.log(`[CCTV] Langkah 1 - Menyelinap ke Pintu Belakang JSON: ${apiUrl}`);
 
             const apiResponse = await fetch(apiUrl, {
                 method: 'GET',
@@ -78,11 +78,10 @@ export class HanerixProvider extends BaseProvider {
             });
 
             if (!apiResponse.ok) {
-                console.log(`[CCTV] GAGAL: Pintu belakang JSON ditutup atau diblokir Cloudflare (${apiResponse.status}).`);
+                console.log(`[CCTV] GAGAL: Pintu belakang JSON ditutup (${apiResponse.status}).`);
                 return this.emptyResult('Jalur WP-JSON gagal diakses');
             }
 
-            // PERBAIKAN TS: Memaksa TypeScript menganggap data ini sebagai daftar/array
             const apiData = (await apiResponse.json()) as any[];
 
             if (!apiData || apiData.length === 0) {
@@ -90,31 +89,60 @@ export class HanerixProvider extends BaseProvider {
                 return this.emptyResult('Film tidak ditemukan di database');
             }
 
-            // Mengambil hasil pencarian pertama
+            // Mengambil Kunci Emas (ID) dari hasil pencarian pertama
             const post = apiData[0];
-            const contentHTML = post.content?.rendered || '';
-            const titleHTML = post.title?.rendered || '';
+            const postId = post.id;
+            const titleHTML = post.title?.rendered || media.title;
             
-            console.log(`[CCTV] Langkah 2 - Brankas Terbuka! Ditemukan: ${titleHTML}`);
+            if (!postId) {
+                console.log(`[CCTV] GAGAL: ID Muvipro tidak ditemukan di dalam JSON.`);
+                return this.emptyResult('ID Film tidak ditemukan');
+            }
 
-            // LANGKAH 2: EKSTRAKSI HARTA KARUN (Mencari Iframe di dalam JSON)
-            // Regex ini akan mencari URL yang diawali http dan mengandung /e/
+            console.log(`[CCTV] Langkah 2 - Kunci Emas Didapatkan! Judul: ${titleHTML} | ID: ${postId}`);
+
+            // Mendeteksi kualitas (jika ada di judul)
+            const qualityLabel = this.detectQuality(titleHTML);
+
+            // LANGKAH 3: MENUKAR KUNCI DENGAN SURAT AJAX
+            console.log(`[CCTV] Langkah 3 - Mengirim Surat AJAX menggunakan ID ${postId}...`);
+            const formData = new URLSearchParams();
+            formData.append('action', 'muvipro_player_content');
+            formData.append('tab', 'p1');
+            formData.append('post_id', postId.toString());
+
+            const ajaxResponse = await fetch(`${this.BASE_URL}wp-admin/admin-ajax.php`, {
+                method: 'POST',
+                headers: {
+                    ...dynamicHeaders,
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Referer': this.BASE_URL
+                },
+                body: formData.toString()
+            });
+
+            if (ajaxResponse.status !== 200) {
+                console.log(`[CCTV] GAGAL: Surat AJAX ditolak peladen (${ajaxResponse.status}).`);
+                return this.emptyResult('Permintaan AJAX ditolak peladen');
+            }
+            
+            const ajaxHtml = await ajaxResponse.text();
+
+            // LANGKAH 4: MEMBUKA BRANKAS IFRAME
             const iframeRegex = /(https?:\/\/[a-zA-Z0-9.-]+\/e\/[a-zA-Z0-9_-]+)/i;
-            const iframeMatch = contentHTML.match(iframeRegex);
+            const iframeMatch = ajaxHtml.match(iframeRegex);
             
             if (!iframeMatch || !iframeMatch[1]) {
-                console.log(`[CCTV] GAGAL: Tautan iframe /e/ tidak ditemukan di dalam teks JSON.`);
+                console.log(`[CCTV] GAGAL: Tautan iframe /e/ tidak ditemukan di balasan AJAX.`);
                 return this.emptyResult('Tautan iframe rotasi tidak ditemukan');
             }
 
             const iframeUrl = iframeMatch[1];
-            console.log(`[CCTV] Langkah 2 - Harta Karun Iframe Ditemukan: ${iframeUrl}`);
+            console.log(`[CCTV] Langkah 4 - Harta Karun Iframe Ditemukan: ${iframeUrl}`);
 
-            // Mendeteksi kualitas dari judul atau isi JSON
-            const qualityLabel = this.detectQuality(titleHTML + ' ' + contentHTML);
-
-            // LANGKAH 3: PEMBURU LEMPARAN (Redirect Hunter)
-            console.log(`[CCTV] Langkah 3 - Mencegat Lemparan Iframe...`);
+            // LANGKAH 5: PEMBURU LEMPARAN (Redirect Hunter)
+            console.log(`[CCTV] Langkah 5 - Mencegat Lemparan Iframe...`);
             
             const iframeResponse = await fetch(iframeUrl, {
                 method: 'GET',
@@ -133,7 +161,7 @@ export class HanerixProvider extends BaseProvider {
                 const locationHeader = iframeResponse.headers.get('location');
                 if (locationHeader) {
                     targetUrl = new URL(locationHeader, iframeUrl).href;
-                    console.log(`[CCTV] Langkah 3 - Lemparan Terdeteksi! Menuju sarang asli: ${targetUrl}`);
+                    console.log(`[CCTV] Langkah 5 - Lemparan Terdeteksi! Menuju sarang asli: ${targetUrl}`);
                     
                     const realResponse = await fetch(targetUrl, {
                         method: 'GET',
@@ -145,7 +173,7 @@ export class HanerixProvider extends BaseProvider {
 
                     if (realResponse.status === 200) {
                         targetHtml = await realResponse.text();
-                        console.log(`[CCTV] Langkah 3 - Berhasil menyusup ke sarang asli.`);
+                        console.log(`[CCTV] Langkah 5 - Berhasil menyusup ke sarang asli.`);
                     } else {
                         console.log(`[CCTV] GAGAL: Sarang asli menolak ketukan (${realResponse.status}).`);
                         return this.emptyResult('Ditolak oleh peladen tujuan');
@@ -163,12 +191,12 @@ export class HanerixProvider extends BaseProvider {
 
             const finalOrigin = new URL(targetUrl).origin;
 
-            // LANGKAH 4: EKSTRAK M3U8 & PEMECAH SANDI
+            // LANGKAH 6: EKSTRAK M3U8 & PEMECAH SANDI
             const m3u8Regex = /((?:https?:\/\/[^"'\s]+)?\/[^"'\s]+\.m3u8)/i;
             let m3u8Match = targetHtml.match(m3u8Regex);
 
             if (!m3u8Match || !m3u8Match[1]) {
-                console.log(`[CCTV] Langkah 4 - M3U8 disandikan! Menjalankan Mesin Pemecah Sandi...`);
+                console.log(`[CCTV] Langkah 6 - M3U8 disandikan! Menjalankan Mesin Pemecah Sandi...`);
                 const unpackedHtml = this.unpackEval(targetHtml);
                 m3u8Match = unpackedHtml.match(m3u8Regex);
             }

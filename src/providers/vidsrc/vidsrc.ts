@@ -71,59 +71,51 @@ export class HanerixProvider extends BaseProvider {
                 console.log(`[CCTV] Langkah 0 - Gagal menghubungi beranda, memakai tiket bawaan.`);
             }
 
-            // Memasang tiket ke dalam header dinamis
             const dynamicHeaders = {
                 ...this.HEADERS,
                 'Cookie': activeCookies
             };
             
-            // LANGKAH 1: Melakukan Pencarian
-            const searchQuery = encodeURIComponent(media.title);
-            const searchUrl = `${this.BASE_URL}?s=${searchQuery}`;
-            console.log(`[CCTV] Langkah 1 - Pencarian: ${searchUrl}`);
-
-            const searchHtml = await this.fetchHtml(searchUrl, {
-                ...dynamicHeaders,
-                'Referer': 'https://google.com/'
-            });
-
-            // Alarm CCTV Anti-Mati Diam-Diam
-            if (!searchHtml) {
-                console.log(`[CCTV] GAGAL: Tidak ada respons dari halaman pencarian (Mungkin IP Vercel diblokir sementara).`);
-                return this.emptyResult('Gagal memuat halaman pencarian');
+            // LANGKAH 1 & 2: JALAN PINTAS NINJA (Merakit URL Otomatis)
+            console.log(`[CCTV] Langkah 1 & 2 - Menggunakan Jalan Pintas Ninja (Mencegah Pencarian)...`);
+            
+            // Membersihkan judul dari karakter aneh dan mengganti spasi dengan strip (-)
+            const baseSlug = media.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+            
+            // Menyiapkan daftar kemungkinan URL untuk diketuk
+            const urlsToTry: string[] = [];
+            if (media.releaseYear) {
+                urlsToTry.push(`${this.BASE_URL}${baseSlug}-${media.releaseYear}/`);
             }
-            if (searchHtml.includes('Cloudflare') || searchHtml.includes('Just a moment...')) {
-                console.log(`[CCTV] GAGAL: Terjaring razia Cloudflare di halaman pencarian!`);
-                return this.emptyResult('Diblokir Cloudflare di awal');
+            urlsToTry.push(`${this.BASE_URL}${baseSlug}/`);
+
+            let pageHtml: string | null = null;
+            let pageUrl = '';
+
+            for (const url of urlsToTry) {
+                console.log(`[CCTV] Mengetuk pintu langsung: ${url}`);
+                const html = await this.fetchHtml(url, {
+                    ...dynamicHeaders,
+                    'Referer': this.BASE_URL
+                });
+
+                // Pastikan halaman berhasil dimuat dan bukan halaman blokir Cloudflare
+                if (html && !html.includes('Cloudflare') && !html.includes('Just a moment...')) {
+                    pageHtml = html;
+                    pageUrl = url;
+                    break; // Berhenti mencari jika pintu berhasil dibuka
+                }
             }
-
-            // LANGKAH 2: Mengekstrak URL film yang tepat
-            const firstWord = media.title.split(' ')[0].toLowerCase().replace(/[^a-z0-9]+/g, '');
-            const linkRegex = new RegExp(`href=["'](${this.BASE_URL}(?!search\\/|feed\\/|tag\\/|category\\/|wp-)[^"']*?${firstWord}[^"']*?\\/?)["']`, 'i');
-            const linkMatch = searchHtml.match(linkRegex);
-
-            if (!linkMatch || !linkMatch[1]) {
-                console.log(`[CCTV] GAGAL: Judul film tidak ditemukan di hasil pencarian.`);
-                return this.emptyResult('Film tidak ditemukan di hasil pencarian');
-            }
-
-            let pageUrl = linkMatch[1];
-            if (!pageUrl.endsWith('/')) pageUrl += '/';
-            console.log(`[CCTV] Langkah 2 - URL Film Ditemukan: ${pageUrl}`);
-
-            // LANGKAH 3: Memuat Halaman Film & Deteksi Kualitas
-            const pageHtml = await this.fetchHtml(pageUrl, {
-                ...dynamicHeaders,
-                'Referer': searchUrl
-            });
 
             if (!pageHtml) {
-                console.log(`[CCTV] GAGAL: Halaman film kosong atau gagal dimuat.`);
-                return this.emptyResult('Gagal memuat halaman film');
+                console.log(`[CCTV] GAGAL: Semua pintu jalan pintas tertutup (URL tidak cocok atau diblokir).`);
+                return this.emptyResult('Gagal memuat halaman film secara langsung');
             }
+
+            console.log(`[CCTV] Langkah 3 - Berhasil mendarat di: ${pageUrl}`);
             
             const qualityLabel = this.detectQuality(pageHtml);
-            console.log(`[CCTV] Langkah 3 - Kualitas Terdeteksi: ${qualityLabel}`);
+            console.log(`[CCTV] Kualitas Terdeteksi: ${qualityLabel}`);
 
             // LANGKAH 4: Pencurian ID Muvipro
             const postIdMatch = pageHtml.match(/post_id\s*=\s*["']?(\d+)["']?/i) || 
@@ -177,7 +169,6 @@ export class HanerixProvider extends BaseProvider {
             // LANGKAH 7: PEMBURU LEMPARAN (Redirect Hunter)
             console.log(`[CCTV] Langkah 7 - Mencegat Lemparan di Pintu Depan...`);
             
-            // Matikan lompatan otomatis (redirect: manual)
             const iframeResponse = await fetch(iframeUrl, {
                 method: 'GET',
                 headers: {
@@ -190,14 +181,13 @@ export class HanerixProvider extends BaseProvider {
             let targetHtml = '';
             let targetUrl = iframeUrl;
 
-            // Jika dilempar (Status 301, 302, 303, 307, 308)
+            // Jika dilempar (Status 301, 302, dsb)
             if (iframeResponse.status >= 300 && iframeResponse.status < 400) {
                 const locationHeader = iframeResponse.headers.get('location');
                 if (locationHeader) {
                     targetUrl = new URL(locationHeader, iframeUrl).href;
                     console.log(`[CCTV] Langkah 7 - Lemparan Terdeteksi! Menuju sarang asli: ${targetUrl}`);
                     
-                    // Mengetuk pintu sarang asli (hanerix.com) membawa tiket VIP Referer
                     const realResponse = await fetch(targetUrl, {
                         method: 'GET',
                         headers: {
@@ -208,7 +198,7 @@ export class HanerixProvider extends BaseProvider {
 
                     if (realResponse.status === 200) {
                         targetHtml = await realResponse.text();
-                        console.log(`[CCTV] Langkah 7 - Berhasil menyusup ke sarang asli dan mendapatkan HTML utuh.`);
+                        console.log(`[CCTV] Langkah 7 - Berhasil menyusup ke sarang asli.`);
                     } else {
                         console.log(`[CCTV] GAGAL: Sarang asli menolak ketukan pintu (${realResponse.status}).`);
                         return this.emptyResult('Ditolak oleh peladen tujuan');
@@ -233,11 +223,9 @@ export class HanerixProvider extends BaseProvider {
             const finalOrigin = new URL(targetUrl).origin;
 
             // LANGKAH 8: Ekstrak M3U8 & Pemecah Sandi
-            // Pencari Regex sangat longgar untuk menangkap file .m3u8 apa pun
             const m3u8Regex = /((?:https?:\/\/[^"'\s]+)?\/[^"'\s]+\.m3u8)/i;
             let m3u8Match = targetHtml.match(m3u8Regex);
 
-            // Jika disandikan (Pasti disandikan sesuai temuan JWPlayer-mu)
             if (!m3u8Match || !m3u8Match[1]) {
                 console.log(`[CCTV] Langkah 8 - M3U8 disandikan! Menjalankan Mesin Pemecah Sandi...`);
                 const unpackedHtml = this.unpackEval(targetHtml);
@@ -251,10 +239,9 @@ export class HanerixProvider extends BaseProvider {
 
             let rawUrl = m3u8Match[1];
             
-            // STRATEGI MENYAMBUNG PETA (Jika alamatnya relatif / tidak ada http)
+            // STRATEGI MENYAMBUNG PETA
             if (!rawUrl.startsWith('http')) {
                 console.log(`[CCTV] Langkah 8 - Alamat relatif terdeteksi: ${rawUrl}`);
-                // Menyambung dengan domain sarang asli (misal hanerix.com/...)
                 rawUrl = rawUrl.startsWith('/') ? `${finalOrigin}${rawUrl}` : `${finalOrigin}/${rawUrl}`;
             }
 
@@ -288,7 +275,6 @@ export class HanerixProvider extends BaseProvider {
     // Fungsi Mesin Pemecah Sandi JavaScript (JWPlayer Packer)
     private unpackEval(html: string): string {
         try {
-            // Regex diperbaiki menggunakan .*? (lazy) agar berhenti tepat di kamus angka tanpa tertipu kutipan lain
             const match = html.match(/}\s*\(\s*(['"])(.*?)\1\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(['"])(.*?)\5\.split\(['"]\|['"]\)/s);
             if (!match) {
                 console.log(`[CCTV] Pemecah Sandi: Pola eval packer tidak ditemukan di dalam HTML.`);
@@ -329,6 +315,7 @@ export class HanerixProvider extends BaseProvider {
         return 'unknown'; 
     }
 
+    // Fungsi penarik HTML, mengembalikan null jika bukan 200 OK (seperti saat 404 Not Found)
     private async fetchHtml(url: string, headers: Record<string, string>): Promise<string | null> {
         try {
             const response = await fetch(url, { headers });

@@ -57,6 +57,31 @@ export class VidNestProvider extends BaseProvider {
         { path: 'klikxxi', query: '' }
     ];
 
+    // TAMBAHAN: Fungsi Logger Aman
+    private logSafe(action: string, data: any) {
+        try {
+            const output = typeof data === 'string' ? data : JSON.stringify(data);
+            console.log(`[VidNest Debug] ${action}:`, output.length > 500 ? output.substring(0, 500) + '... (truncated)' : output);
+        } catch (e) {
+            console.log(`[VidNest Debug] ${action}: (Unloggable data)`);
+        }
+    }
+
+    // TAMBAHAN: Pendeteksi dan Penyuplai Header Otomatis untuk Proxy
+    private getProxyHeaders(url: string, providedHeaders?: Record<string, string>): Record<string, string> {
+        let headers = providedHeaders || { ...this.HEADERS };
+        
+        // Deteksi jika ini adalah CDN Asia yang menggunakan proteksi Loklok
+        if (url.includes('storrrrrrm.site') || url.includes('hellstorm.lol') || url.includes('hls2.vdrk.site')) {
+            headers = {
+                ...headers,
+                Referer: 'https://lok-lok.cc/',
+                Origin: 'https://lok-lok.cc'
+            };
+        }
+        return headers;
+    }
+
     private readonly handlers: {
         [K in SupportedServer]: {
             parse: (data: string) => ServerMap[K];
@@ -68,7 +93,8 @@ export class VidNestProvider extends BaseProvider {
             parse: (d) => decrypt<klikxxiResponse>(d),
             mapSources: (root) =>
                 root.sources.map((s) => ({
-                    url: this.createProxyUrl(s.url),
+                    // PATCH: Menyuntikkan headers ke dalam proxy
+                    url: this.createProxyUrl(s.url, this.getProxyHeaders(s.url)),
                     type: this.inferSourceType(s.type, s.url),
                     quality: s.quality,
                     audioTracks: [{ language: 'English', label: 'eng' }],
@@ -81,7 +107,8 @@ export class VidNestProvider extends BaseProvider {
             parse: (d) => decrypt<allmoviesResponse>(d),
             mapSources: (root) =>
                 root.streams.map((s) => ({
-                    url: this.createProxyUrl(s.url),
+                    // PATCH: Menyuntikkan headers ke dalam proxy
+                    url: this.createProxyUrl(s.url, this.getProxyHeaders(s.url)),
                     type: this.inferSourceType(s.type, s.url),
                     quality: 'Auto',
                     audioTracks: [{ language: s.language, label: s.language }],
@@ -94,7 +121,7 @@ export class VidNestProvider extends BaseProvider {
             parse: (d) => decrypt<onehdResponse>(d),
             mapSources: (root) => [
                 {
-                    url: this.createProxyUrl(root.url, root.headers),
+                    url: this.createProxyUrl(root.url, this.getProxyHeaders(root.url, root.headers)),
                     type: this.inferSourceType('', root.url),
                     quality: 'Auto',
                     audioTracks: [{ language: 'English', label: 'eng' }],
@@ -103,7 +130,7 @@ export class VidNestProvider extends BaseProvider {
             ],
             mapSubtitles: (root) =>
                 root.subtitles.map((s) => ({
-                    url: this.createProxyUrl(s.url, root.headers),
+                    url: this.createProxyUrl(s.url, this.getProxyHeaders(s.url, root.headers)),
                     label: s.lang,
                     format: this.inferSubtitleFormat(s.url)
                 }))
@@ -113,7 +140,8 @@ export class VidNestProvider extends BaseProvider {
             parse: (d) => decrypt<hollymoviehdResponse>(d),
             mapSources: (root) =>
                 root.sources.map((s) => ({
-                    url: this.createProxyUrl(s.file),
+                    // PATCH: Menyuntikkan headers ke dalam proxy
+                    url: this.createProxyUrl(s.file, this.getProxyHeaders(s.file)),
                     type: this.inferSourceType(s.type, s.file),
                     quality: s.label,
                     audioTracks: [{ language: 'English', label: 'eng' }],
@@ -128,7 +156,7 @@ export class VidNestProvider extends BaseProvider {
                 {
                     url: this.createProxyUrl(
                         root.data.stream.playlist,
-                        root.headers
+                        this.getProxyHeaders(root.data.stream.playlist, root.headers)
                     ),
                     type: this.inferSourceType(
                         root.data.stream.type,
@@ -141,7 +169,7 @@ export class VidNestProvider extends BaseProvider {
             ],
             mapSubtitles: (root) =>
                 root.data.stream.captions.map((c) => ({
-                    url: this.createProxyUrl(c.url, root.headers),
+                    url: this.createProxyUrl(c.url, this.getProxyHeaders(c.url, root.headers)),
                     label: c.language,
                     format: this.inferSubtitleFormat(c.url)
                 }))
@@ -151,7 +179,8 @@ export class VidNestProvider extends BaseProvider {
             parse: (d) => decrypt<deltaResponse>(d),
             mapSources: (root) =>
                 root.streams.map((s) => ({
-                    url: this.createProxyUrl(s.url),
+                    // PATCH: Menyuntikkan headers ke dalam proxy
+                    url: this.createProxyUrl(s.url, this.getProxyHeaders(s.url)),
                     type: this.inferSourceType(s.type, s.url),
                     quality: 'Auto',
                     audioTracks: [
@@ -166,7 +195,8 @@ export class VidNestProvider extends BaseProvider {
             parse: (d) => decrypt<purstreamResponse>(d),
             mapSources: (root) =>
                 root.sources.map((s) => ({
-                    url: this.createProxyUrl(s.url),
+                    // PATCH: Menyuntikkan headers ke dalam proxy
+                    url: this.createProxyUrl(s.url, this.getProxyHeaders(s.url)),
                     type: this.inferSourceType(s.format, s.url),
                     quality: this.inferQuality(s.name),
                     audioTracks: [{ language: 'French', label: 'fr' }],
@@ -179,7 +209,7 @@ export class VidNestProvider extends BaseProvider {
             parse: (d) => decrypt<movieboxSource>(d),
             mapSources: (root) =>
                 root.url.map((u) => ({
-                    url: this.createProxyUrl(u.link, this.HEADERS),
+                    url: this.createProxyUrl(u.link, this.getProxyHeaders(u.link, this.HEADERS)),
                     type: this.inferSourceType(u.type, u.link),
                     quality: 'Auto',
                     audioTracks: [
@@ -210,6 +240,8 @@ export class VidNestProvider extends BaseProvider {
         const subtitles: Subtitle[] = [];
         const diagnostics: Diagnostic[] = [];
 
+        this.logSafe('Initiating Scrape', `TMDB ID: ${media.tmdbId}`);
+
         const promises = this.SERVERS.map((server) => {
             const url =
                 media.type === 'movie'
@@ -225,6 +257,7 @@ export class VidNestProvider extends BaseProvider {
             results.filter((r) => r.status === 'rejected').length ===
             results.length
         ) {
+            this.logSafe('Scrape Failed', 'All servers rejected the request');
             diagnostics.push({
                 code: 'PARTIAL_SCRAPE',
                 field: '',
@@ -252,13 +285,19 @@ export class VidNestProvider extends BaseProvider {
 
             if (!(key in this.handlers)) return;
 
-            const { sources: s, subtitles: sub } = this.handleServer(
-                key,
-                result.value.data
-            );
+            try {
+                const { sources: s, subtitles: sub } = this.handleServer(
+                    key,
+                    result.value.data
+                );
+                
+                this.logSafe(`Sources from ${key}`, `Found ${s.length} sources`);
 
-            sources.push(...s);
-            subtitles.push(...sub);
+                sources.push(...s);
+                subtitles.push(...sub);
+            } catch (err) {
+                this.logSafe(`Handler Error (${key})`, err);
+            }
         });
 
         return {
@@ -290,13 +329,19 @@ export class VidNestProvider extends BaseProvider {
     }
 
     private async fetchVidnest(url: string) {
-        const res = await fetch(url, { headers: this.HEADERS });
+        try {
+            const res = await fetch(url, { headers: this.HEADERS });
 
-        if (!res.ok) {
-            throw new Error(`VidNest: ${res.status}`);
+            if (!res.ok) {
+                this.logSafe('Fetch Error', `Status ${res.status} for ${url}`);
+                throw new Error(`VidNest: ${res.status}`);
+            }
+
+            return await res.json() as Promise<{ encrypted: boolean; data: string }>;
+        } catch (error) {
+            this.logSafe('Fetch Exception', error);
+            throw error;
         }
-
-        return res.json() as Promise<{ encrypted: boolean; data: string }>;
     }
 
     private inferSourceType(type: string, url: string): SourceType {
